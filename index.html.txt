@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Book of the Dead</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Book of the Dead</h1>
+
+  <button onclick="startApp()">Start</button>
+
+  <script src="script.js"></script>
+</body>
+</html>
