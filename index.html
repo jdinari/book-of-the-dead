@@ -1,19 +1,35 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Book of the Dead</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tomb Game</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-<div id="game">
-  <div id="player"></div>
+  <div id="game-world">
 
-  <div id="sarcophagus">⚰️</div>
+    <!-- Tomb room -->
+    <div id="tomb">
 
-  <div class="ushabti">🗿</div>
-</div>
+      <div class="wall"></div>
+      <div class="floor"></div>
 
-<script src="script.js"></script>
+      <!-- Sarcophagus -->
+      <div class="object sarcophagus"></div>
+
+      <!-- Ushabti statues -->
+      <div class="object ushabti" style="left: 100px; top: 250px;"></div>
+      <div class="object ushabti" style="left: 500px; top: 220px;"></div>
+
+      <!-- Player -->
+      <div id="player"></div>
+
+    </div>
+
+  </div>
+
+  <script src="script.js"></script>
 </body>
 </html>
