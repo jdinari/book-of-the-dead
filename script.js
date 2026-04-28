@@ -11,7 +11,17 @@ canvas.height = window.innerHeight;
 // UI
 // =====================
 const ui = document.getElementById("ui");
+function showInspectUI(obj) {
+  ui.style.display = "block";
 
+  if (obj.name === "sarcophagus") {
+    ui.textContent = "An ancient sarcophagus. The stone feels warm...";
+  } else if (obj.name === "ushabti") {
+    ui.textContent = "A small ushabti statue. It feels like it’s watching.";
+  } else {
+    ui.textContent = "Unknown artifact.";
+  }
+}
 // =====================
 // INPUT
 // =====================
@@ -30,8 +40,15 @@ const camera = {
   y: 0
 };
 
-const cameraSettings = {
-  smoothness: 0.08
+const cameraState = {
+  zoom: 1,
+  targetZoom: 1
+};
+
+const inspectState = {
+  active: false,
+  focus: null,
+  zoom: 15
 };
 
 // =====================
@@ -44,7 +61,6 @@ const player = {
   speed: 3,
   walkFrame: 0,
   isMoving: false,
-
   heldItem: null,
   lampOn: false
 };
@@ -56,8 +72,6 @@ const objects = [
   { name: "sarcophagus", x: 350, y: 200, w: 60, h: 30, color: "#8b6b3f" },
   { name: "ushabti", x: 100, y: 250, w: 15, h: 25, color: "#5e5e5e" },
   { name: "ushabti", x: 500, y: 220, w: 15, h: 25, color: "#5e5e5e" },
-
-  // 🔦 TORCH (physical object)
   {
     name: "torch",
     type: "torch",
@@ -72,6 +86,8 @@ const objects = [
     friction: 0.85
   }
 ];
+
+
 
 // =====================
 // PROXIMITY
@@ -97,55 +113,47 @@ function checkProximity() {
 }
 
 // =====================
-// COLLISION
-// =====================
-function isColliding(a, b) {
-  return (
-    a.x < b.x + b.w &&
-    a.x + a.size > b.x &&
-    a.y < b.y + b.h &&
-    a.y + a.size > b.y
-  );
-}
-
-// =====================
 // INPUT
 // =====================
 window.addEventListener("keydown", (e) => {
-  keys[e.key.toLowerCase()] = true;
-
   const k = e.key.toLowerCase();
+  keys[k] = true;
 
-  // E → interact
-  if (k === "e" && nearObject) {
-    if (nearObject.name !== "torch") {
-      showInteraction(nearObject);
+  if (k === "e" && nearObject && nearObject.name !== "torch") {
+    const alreadyInspecting =
+      inspectState.active &&
+      inspectState.focus === nearObject;
+
+    if (alreadyInspecting) {
+      inspectState.active = false;
+      inspectState.focus = null;
+      cameraState.targetZoom = 1;
+      ui.style.display = "none";
+    } else {
+      inspectState.active = true;
+      inspectState.focus = nearObject;
+      cameraState.targetZoom = inspectState.zoom;
+
+      showInspectUI(nearObject);
     }
   }
 
-  // X → pick up / drop torch
   if (k === "x") {
-    // pick up
     if (nearObject && nearObject.type === "torch" && !player.heldItem) {
       player.heldItem = nearObject;
       nearObject.pickedUp = true;
-    }
-    // drop
-    else if (player.heldItem && player.heldItem.type === "torch") {
+    } else if (player.heldItem) {
       const t = player.heldItem;
-
       t.x = player.x + 20;
       t.y = player.y + 10;
-
       t.pickedUp = false;
       player.heldItem = null;
       player.lampOn = false;
     }
   }
 
-  // L → lamp toggle
   if (k === "l") {
-    if (player.heldItem && player.heldItem.type === "torch") {
+    if (player.heldItem?.type === "torch") {
       player.lampOn = !player.lampOn;
     }
   }
@@ -155,6 +163,15 @@ window.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
 });
 
+
+function isColliding(a, b) {
+  return (
+    a.x < b.x + b.w &&
+    a.x + player.size > b.x &&
+    a.y < b.y + b.h &&
+    a.y + player.size > b.y
+  );
+}
 // =====================
 // UPDATE
 // =====================
@@ -164,25 +181,24 @@ function update() {
 
   player.isMoving = false;
 
-  if (keys["arrowleft"] || keys["a"]) {
+  if (keys["a"] || keys["arrowleft"]) {
     nextX -= player.speed;
     player.isMoving = true;
   }
-  if (keys["arrowright"] || keys["d"]) {
+  if (keys["d"] || keys["arrowright"]) {
     nextX += player.speed;
     player.isMoving = true;
   }
-  if (keys["arrowup"] || keys["w"]) {
+  if (keys["w"] || keys["arrowup"]) {
     nextY -= player.speed;
     player.isMoving = true;
   }
-  if (keys["arrowdown"] || keys["s"]) {
+  if (keys["s"] || keys["arrowdown"]) {
     nextY += player.speed;
     player.isMoving = true;
   }
 
-  const testPlayer = { x: nextX, y: nextY, size: player.size };
-
+  // boundary check
   if (
     nextX < 0 ||
     nextY < 0 ||
@@ -190,77 +206,166 @@ function update() {
     nextY > world.height - player.size
   ) return;
 
+  // collision test
+  const testPlayer = { x: nextX, y: nextY };
+
   for (const obj of objects) {
-    if (!obj || obj.pickedUp) continue;
+    if (obj.pickedUp) continue;
+    if (obj.type === "torch") continue;
 
-    // solid objects block movement
-    if (obj.type !== "torch") {
-      if (isColliding(testPlayer, obj)) return;
-      continue;
-    }
-
-    // 🔥 TORCH PUSH SYSTEM
     if (isColliding(testPlayer, obj)) {
-      const dx = obj.x - player.x;
-      const dy = obj.y - player.y;
-
-      const len = Math.sqrt(dx * dx + dy * dy) || 1;
-
-      const push = 0.8;
-
-      obj.vx += (dx / len) * push;
-      obj.vy += (dy / len) * push;
+      return; // block movement
     }
   }
+
+  for (const obj of objects) {
+  if (obj.type !== "torch" || obj.pickedUp) continue;
+
+  const dx = obj.x - player.x;
+  const dy = obj.y - player.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist < 15) {
+    obj.vx += dx * 0.05;
+    obj.vy += dy * 0.05;
+  }
+}
 
   player.x = nextX;
   player.y = nextY;
 }
 
-// =====================
-// CAMERA
-// =====================
-function updateCamera() {
-  const targetX = player.x - canvas.width / 2 + player.size / 2;
-  const targetY = player.y - canvas.height / 2 + player.size / 2;
-
-  camera.x += (targetX - camera.x) * cameraSettings.smoothness;
-  camera.y += (targetY - camera.y) * cameraSettings.smoothness;
-}
-
-// =====================
-// TORCH PHYSICS
-// =====================
 function updateTorchPhysics() {
   for (const obj of objects) {
     if (!obj || obj.type !== "torch" || obj.pickedUp) continue;
 
+    // apply velocity
     obj.x += obj.vx;
     obj.y += obj.vy;
 
+    // friction (slowly stops)
     obj.vx *= obj.friction;
     obj.vy *= obj.friction;
+
+    // world bounds collision
+    if (obj.x < 0) {
+      obj.x = 0;
+      obj.vx *= -0.5;
+    }
+    if (obj.x + obj.w > world.width) {
+      obj.x = world.width - obj.w;
+      obj.vx *= -0.5;
+    }
+    if (obj.y < 0) {
+      obj.y = 0;
+      obj.vy *= -0.5;
+    }
+    if (obj.y + obj.h > world.height) {
+      obj.y = world.height - obj.h;
+      obj.vy *= -0.5;
+    }
+
+    // simple push away from solid objects
+    for (const other of objects) {
+      if (other === obj) continue;
+      if (other.type === "torch") continue;
+      if (other.pickedUp) continue;
+
+      if (
+        obj.x < other.x + other.w &&
+        obj.x + obj.w > other.x &&
+        obj.y < other.y + other.h &&
+        obj.y + obj.h > other.y
+      ) {
+        // push torch out
+        const dx = (obj.x + obj.w / 2) - (other.x + other.w / 2);
+        const dy = (obj.y + obj.h / 2) - (other.y + other.h / 2);
+
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        obj.vx += (dx / len) * 0.5;
+        obj.vy += (dy / len) * 0.5;
+      }
+    }
   }
+}
+// =====================
+// CAMERA (FIXED)
+// =====================
+function updateCamera() {
+  const zoom = cameraState.zoom;
+
+  let targetX, targetY;
+
+  if (inspectState.active && inspectState.focus) {
+    const focus = inspectState.focus;
+
+    targetX = focus.x + focus.w / 2 - canvas.width / (2 * zoom);
+    targetY = focus.y + focus.h / 2 - canvas.height / (2 * zoom);
+  } else {
+    targetX = player.x + player.size / 2 - canvas.width / (2 * zoom);
+    targetY = player.y + player.size / 2 - canvas.height / (2 * zoom);
+  }
+
+  camera.x = targetX;
+  camera.y = targetY;
 }
 
 // =====================
-// DRAW WORLD
+// TRANSFORM
 // =====================
-function drawTomb() {
-  ctx.fillStyle = "#2b2a26";
-  ctx.fillRect(-camera.x, -camera.y, world.width, world.height);
+function applyCameraTransform() {
+  const zoom = cameraState.zoom;
 
-  ctx.fillStyle = "#3a352d";
-  ctx.fillRect(
-    -camera.x,
-    -camera.y + world.height * 0.6,
-    world.width,
-    world.height * 0.4
+  ctx.setTransform(
+    zoom, 0,
+    0, zoom,
+    -camera.x * zoom,
+    -camera.y * zoom
   );
 }
 
+function resetTransform() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
 // =====================
-// OBJECTS
+// DRAW WORLD (FIXED)
+// =====================
+function drawTomb() {
+  // FLOOR
+  ctx.fillStyle = "#2b2a26";
+  ctx.fillRect(0, 0, world.width, world.height);
+
+  // BACK WALL STRIP
+  ctx.fillStyle = "#23211e";
+  ctx.fillRect(0, 0, world.width, 80);
+
+  // BURIAL PLATFORM
+  ctx.fillStyle = "#3a352d";
+  ctx.fillRect(0, world.height * 0.6, world.width, world.height * 0.4);
+
+  // STONE TILES (simple grid)
+  ctx.strokeStyle = "#1f1d1a";
+  for (let x = 0; x < world.width; x += 40) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, world.height);
+    ctx.stroke();
+  }
+
+  for (let y = 0; y < world.height; y += 40) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(world.width, y);
+    ctx.stroke();
+  }
+}
+
+
+
+// =====================
+// OBJECTS (FIXED)
 // =====================
 function drawObjects() {
   for (const obj of objects) {
@@ -268,142 +373,42 @@ function drawObjects() {
 
     ctx.fillStyle = obj === nearObject ? "yellow" : obj.color;
 
-    ctx.fillRect(
-      obj.x - camera.x,
-      obj.y - camera.y,
-      obj.w,
-      obj.h
-    );
+    ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
   }
 }
 
 // =====================
-// PLAYER
+// PLAYER (FIXED)
 // =====================
 function drawPlayer() {
-  const x = player.x - camera.x;
-  const y = player.y - camera.y;
+  const x = player.x;
+  const y = player.y;
 
-  const bob = Math.sin(player.walkFrame) * 2;
-
-  const skin = "#f2c9a0";
-  const outfit = "#4b5d67";
-
-  const bx = x;
-  const by = y + bob;
-
-  ctx.fillStyle = skin;
+  ctx.fillStyle = "white";
   ctx.beginPath();
-  ctx.arc(bx + 10, by - 8, 6, 0, Math.PI * 2);
+  ctx.arc(x, y, 10, 0, Math.PI * 2);
   ctx.fill();
-
-  ctx.fillStyle = "black";
-  ctx.fillRect(bx + 7, by - 9, 1, 1);
-  ctx.fillRect(bx + 12, by - 9, 1, 1);
-
-  ctx.fillStyle = outfit;
-  ctx.fillRect(bx + 6, by - 2, 8, 10);
-
-  const arm = Math.sin(player.walkFrame) * 2;
-  ctx.fillRect(bx + 2, by, 3, 8 + arm);
-  ctx.fillRect(bx + 15, by, 3, 8 - arm);
-
-  const leg = Math.sin(player.walkFrame) * 3;
-  ctx.fillRect(bx + 7, by + 8, 3, 8 + leg);
-  ctx.fillRect(bx + 10, by + 8, 3, 8 - leg);
-
-  // torch in hand
-  if (player.heldItem && player.heldItem.type === "torch") {
-    ctx.fillStyle = "#c9a24a";
-    ctx.fillRect(bx + 14, by - 2, 6, 12);
-  }
-}
-
-// =====================
-// LIGHTING
-// =====================
-const lighting = {
-  baseDarkness: 0.55,
-  baseRadius: 20,
-  pulseSpeed: 0.0015,
-  pulseStrength: 3
-};
-
-function drawLighting() {
-  const t = Date.now() * lighting.pulseSpeed;
-  const pulse = Math.sin(t) * lighting.pulseStrength;
-
-  let radius = lighting.baseRadius + pulse;
-  let darkness = lighting.baseDarkness;
-
-  const hasLamp =
-    player.heldItem &&
-    player.heldItem.type === "torch" &&
-    player.lampOn;
-
-  if (hasLamp) {
-    radius *= 2.2;
-    darkness = 0.35;
-  }
-
-  ctx.fillStyle = `rgba(0,0,0,${darkness})`;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  const lx = player.x - camera.x + player.size / 2;
-  const ly = player.y - camera.y + player.size / 2;
-
-  ctx.save();
-  ctx.globalCompositeOperation = "destination-out";
-
-  const gradient = ctx.createRadialGradient(lx, ly, 0, lx, ly, radius);
-
-  gradient.addColorStop(0, "rgba(0,0,0,1)");
-  gradient.addColorStop(0.4, "rgba(0,0,0,0.6)");
-  gradient.addColorStop(1, "rgba(0,0,0,0)");
-
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(lx, ly, radius, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.restore();
-}
-
-// =====================
-// UI
-// =====================
-function showInteraction(obj) {
-  ui.style.display = "block";
-
-  if (obj.name === "sarcophagus") {
-    ui.textContent = "An ancient sarcophagus. It hums faintly...";
-  } else if (obj.name === "ushabti") {
-    ui.textContent = "A small ushabti statue. It feels watchful...";
-  }
-
-  setTimeout(() => {
-    ui.style.display = "none";
-  }, 2000);
 }
 
 // =====================
 // LOOP
 // =====================
 function loop() {
+  resetTransform();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   update();
   updateCamera();
-  updateTorchPhysics();
   checkProximity();
 
-  if (player.isMoving) player.walkFrame += 0.15;
-  else player.walkFrame *= 0.85;
+  updateTorchPhysics();
+  cameraState.zoom += (cameraState.targetZoom - cameraState.zoom) * 0.1;
+
+  applyCameraTransform();
 
   drawTomb();
   drawObjects();
   drawPlayer();
-  drawLighting();
 
   requestAnimationFrame(loop);
 }
