@@ -3,13 +3,31 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Tomb Canvas Game</title>
+  <title>Book of the Dead — Tomb</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
 <canvas id="game"></canvas>
+<div id="quest-panel">
+  <div id="room-title"></div>
+  <div id="objective-text"></div>
+</div>
+
 <div id="ui"></div>
+
+<div id="map-panel" class="hidden"></div>
+
+<div id="inventory-grid">
+  <div class="slot" data-index="0"></div>
+  <div class="slot" data-index="1"></div>
+  <div class="slot" data-index="2"></div>
+  <div class="slot" data-index="3"></div>
+  <div class="slot" data-index="4"></div>
+  <div class="slot" data-index="5"></div>
+</div>
+
+<div id="help-text">Controls: W/A/S/D or arrows to move · E to inspect · X to pick up/drop · Q to cycle held item · L to light torch.</div>
 
 <script src="script.js"></script>
 </body>
