@@ -50,11 +50,11 @@ canvas {
 #inventory-grid {
   position: absolute;
   right: 16px;
-  bottom: 16px;
+  bottom: 70px;
   display: grid;
-  grid-template-columns: repeat(6, 56px);
-  grid-gap: 10px;
-  padding: 12px;
+  grid-template-columns: repeat(6, 42px);
+  grid-gap: 6px;
+  padding: 8px;
   background: rgba(12, 8, 4, 0.92);
   border: 1px solid rgba(182, 157, 110, 0.95);
   box-shadow: 0 0 24px rgba(0, 0, 0, 0.75);
@@ -62,48 +62,57 @@ canvas {
 
 #map-panel {
   position: absolute;
-  left: 16px;
-  bottom: 16px;
-  width: 220px;
-  border: 1px solid rgba(182, 157, 110, 0.95);
-  background: rgba(18, 14, 8, 0.95);
-  padding: 12px;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.75);
-  color: #f7e7c8;
-  font-family: "Georgia", serif;
-  display: none;
-  z-index: 3;
+  left: 20px;
+  bottom: 20px;
+  width: 320px;
+  height: 220px;
+  background: rgba(15, 15, 15, 0.85);
+  border: 2px solid #3a352d;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-#map-panel .map-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  margin-bottom: 8px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.map-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
-#map-panel .map-room {
+/* ROOM */
+.map-room {
+  position: absolute;
+  background: #2f2a24;
+  border: 2px solid #5a5040;
+  border-radius: 6px;
   display: flex;
-  justify-content: space-between;
-  padding: 6px 8px;
-  margin-bottom: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  align-items: center;
+  justify-content: center;
 }
 
-#map-panel .current {
-  background: rgba(255, 235, 150, 0.15);
-  border-color: rgba(255, 235, 150, 0.3);
+.map-room.current {
+  border-color: #e0c070;
 }
 
-.hidden {
-  display: none;
+/* LABEL */
+.map-room-label {
+  font-size: 10px;
+  color: #d8cba8;
+}
+
+/* PLAYER */
+.map-player {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #ffd76a;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px rgba(255, 215, 106, 0.8);
 }
 
 .slot {
-  width: 56px;
-  height: 56px;
+  width: 42px;
+  height: 42px;
   border: 1px solid rgba(182, 157, 110, 0.7);
   background: rgba(58, 48, 34, 0.84);
   display: flex;
@@ -113,7 +122,7 @@ canvas {
   font-size: 1rem;
   line-height: 1.1;
   color: #f4ebd4;
-  padding: 4px;
+  padding: 2px;
 }
 
 .slot.active {
@@ -122,28 +131,107 @@ canvas {
 }
 
 #ui {
-  position: absolute;
-  top: 30%;
+  position: fixed;
+  bottom: 30px;
   left: 50%;
   transform: translateX(-50%);
-  width: 360px;
-  padding: 12px 14px;
-  background: rgba(8, 6, 4, 0.84);
-  border: 1px solid rgba(182, 157, 110, 0.6);
-  color: #f4ebd4;
+
+  width: 70%;
+  max-width: 800px;
+
+  text-align: center;
+
+  background: rgba(20, 16, 10, 0.75);
+  color: #e8dcc2;
+
+  padding: 14px 20px;
+  border: 1px solid #5a4a2f;
+  border-radius: 8px;
+
   font-family: "Georgia", serif;
-  letter-spacing: 0.02em;
-  display: none;
+  letter-spacing: 0.3px;
+
+  pointer-events: none;
 }
 
 #help-text {
-  position: absolute;
-  left: 16px;
-  bottom: 88px;
-  font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.72);
+  position: fixed;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  width: 90%;
+  text-align: center;
+
+  font-size: 12px;
+  color: rgba(240, 230, 210, 0.7);
+
+  pointer-events: none;
 }
 
 .empty {
   color: rgba(255, 255, 255, 0.45);
+}
+
+/* ===================== */
+/* NOTEBOOK / GLYPH UI   */
+/* ===================== */
+
+.notebook,
+#glyph-panel {
+  position: absolute;
+  inset: 10%;
+  background: rgba(20, 18, 14, 0.95);
+  border: 2px solid #c2a86b;
+  color: #e8d9b5;
+  font-family: serif;
+  padding: 20px;
+  overflow-y: auto;
+  box-shadow: 0 0 40px rgba(0,0,0,0.8);
+  z-index: 100;
+}
+
+.hidden {
+  display: none;
+}
+
+/* titles */
+.notebook-title {
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+
+.notebook-sub {
+  font-size: 14px;
+  opacity: 0.7;
+  margin-bottom: 20px;
+}
+
+/* grid */
+.notebook-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/* entries */
+.note-entry {
+  border: 1px solid rgba(194,168,107,0.3);
+  padding: 10px;
+  background: rgba(0,0,0,0.2);
+}
+
+/* glyphs */
+.glyph-big {
+  font-size: 28px;
+}
+
+.glyph-line {
+  font-size: 14px;
+  margin-top: 6px;
+}
+
+.glyph-status {
+  font-size: 12px;
+  opacity: 0.6;
 }

@@ -22,9 +22,20 @@ const helpText = document.getElementById("help-text");
 const mapPanel = document.getElementById("map-panel");
 const inventorySlots = Array.from(document.querySelectorAll("#inventory-grid .slot"));
 
-let mapUnlocked = false;
+let mapUnlocked = true;
 let mapVisible = false;
 let glyphDecoded = false;
+let activeDoor = null;
+let doorReadyToEnter = false;
+let decodingView = false;
+let notebookOpen = false;
+let glyphNotebookUnlocked = false;
+const glyphPanel = document.getElementById("glyph-panel");
+const gameState = {
+  completedObjectives: {}
+};
+
+
 
 function showInspectUI(obj) {
   ui.style.display = "block";
@@ -38,18 +49,26 @@ function showInspectUI(obj) {
   } else if (obj.type === "torch") {
     lines.push(obj.text || "A bronze torch. It will help you see deeper in the tomb.");
   } else if (obj.type === "rosetta") {
-    lines.push(obj.text || "A Rosetta fragment inscribed with matching glyphs.");
-    lines.push(`Glyphs: ${obj.glyphs || "𓂀𓄿"}`);
-    lines.push(`Sound: ${obj.sound || "a / ꜣ"}`);
-    lines.push("Use it to decode the larger glyph stone.");
+    lines.push(obj.text || "A fragment of the Rosetta stone.");
+    lines.push(`Glyph: ${obj.glyph}`);
+    lines.push(`Meaning: ${obj.letter}`);
+    lines.push("This fragment helps decode the glyph stone.");
     lines.push("Press X to add it to your inventory.");
   } else if (obj.type === "glyph") {
     lines.push(obj.text || "A stone slab etched with hieroglyphs.");
+    const glyphDisplay = Array.isArray(obj.glyphText)      ? obj.glyphText.join(" ")     : obj.glyphText;
     lines.push(`Inscription: ${obj.glyphText || "𓂀 𓄿 𓈖 𓍿 𓏏 𓊪"}`);
-    lines.push("Transliteration guide:");
-    lines.push("𓂀 = a, 𓄿 = ꜣ, 𓈖 = n, 𓍿 = t, 𓏏 = t, 𓊪 = p");
+    lines.push("Known glyphs:");
+    const known = Object.entries(glyphKnowledge);
+    if (known.length === 0) {
+      lines.push("None yet. Find Rosetta fragments to decipher.");
+    } else {
+      for (const [glyph, meaning] of known) {
+        lines.push(`${glyph} = ${meaning}`);
+      }
+    }
     if (inventory.filter(item => item.type === "rosetta").length >= 3) {
-      lines.push("Press D to decode the glyphs with your Rosetta fragments.");
+      lines.push("Press G to decode the glyphs with your Rosetta fragments.");
     } else {
       lines.push("Collect the Rosetta fragments to unlock the full phrase.");
     }
@@ -65,6 +84,21 @@ function showInspectUI(obj) {
   }
 
   ui.innerHTML = lines.map(line => `<div>${line}</div>`).join("");
+}
+
+function removeItemFromInventory(type) {
+  for (let i = inventory.length - 1; i >= 0; i--) {
+    if (inventory[i].type === type) {
+      inventory.splice(i, 1);
+    }
+  }
+
+  if (player.heldItem?.type === type) {
+    player.heldItem = null;
+  }
+
+  player.inventoryIndex = Math.max(0, player.inventoryIndex - 1);
+  updateUI();
 }
 
 function hideInspectUI() {
@@ -95,45 +129,203 @@ function getItemIcon(item) {
   }
 }
 
-function renderMap() {
-  const mapRooms = [
-    { id: "burial-chamber", label: "Burial",
-      desc: "Tomb",
-    },
-    { id: "right-room", label: "Antechamber",
-      desc: "East",
-    },
-    { id: "bottom-room", label: "Depths",
-      desc: "South",
-    }
-  ];
+function renderGlyphPanel(obj) {
+  const panel = document.getElementById("glyph-panel");
 
-  mapPanel.innerHTML = `
-    <div class="map-title">Maze Map (M to toggle)</div>
-    ${mapRooms.map(room => `
-      <div class="map-room ${room.id === currentRoom.id ? "current" : ""}">
-        <span>${room.label}</span>
-        <span>${room.id === currentRoom.id ? "●" : "○"}</span>
+  panel.style.display = "block";
+
+  const glyphs = obj.glyphText || [];
+
+  panel.innerHTML = glyphs.map(g => `
+    <div class="glyph-row">
+      <span class="glyph">${g}</span>
+      <input data-glyph="${g}" maxlength="1"
+        value="${playerGlyphMap[g] || ""}">
+    </div>
+  `).join("");
+
+  panel.querySelectorAll("input").forEach(input => {
+    input.addEventListener("input", e => {
+      const g = e.target.dataset.glyph;
+      playerGlyphMap[g] = e.target.value.toUpperCase();
+      checkGlyphSolution(obj);
+    });
+  });
+}
+
+function checkGlyphSolution(obj) {
+  for (const g of Object.keys(GLYPH_SOLUTION)) {
+    if ((playerGlyphMap[g] || "") !== GLYPH_SOLUTION[g]) {
+      return;
+    }
+  }
+
+  glyphDecoded = true;
+  markObjective("decode-glyphs");
+
+  ui.textContent = "The glyphs resolve: LIGHT AND TRUTH OPEN THE EASTERN PASSAGE.";
+}
+
+const MAP_LAYOUT = {
+  "burial-chamber": { x: 0, y: 0 },
+  "right-room":     { x: 1, y: 0 },
+  "bottom-room":    { x: 0, y: 1 }
+};
+
+
+
+function renderMap() {
+  const padding = 40;
+  const size = 120;
+
+  const panel = mapPanel.getBoundingClientRect();
+  const current = MAP_LAYOUT[currentRoom.id];
+
+  const centerX = panel.width / 2;
+  const centerY = panel.height / 2;
+
+  const currentRoomX = current.x * size + padding + size / 2;
+  const currentRoomY = current.y * size + padding + size / 2;
+
+  const offsetX = centerX - currentRoomX;
+  const offsetY = centerY - currentRoomY;
+
+  let html = `<div class="map-canvas" style="position:relative;">`;
+
+  // =====================
+  // ROOMS
+  // =====================
+  for (const room of rooms) {
+    const pos = MAP_LAYOUT[room.id];
+    if (!pos) continue;
+
+    const x = pos.x * size + padding + offsetX;
+    const y = pos.y * size + padding + offsetY;
+
+    const isCurrent = room.id === currentRoom.id;
+
+    html += `
+      <div class="map-room-node ${isCurrent ? "current" : ""}"
+           style="
+             position:absolute;
+             left:${x}px;
+             top:${y}px;
+             width:${size}px;
+             height:${size}px;
+             background:${isCurrent ? "#c9a24a" : "#3a352d"};
+             border:2px solid #222;
+             box-sizing:border-box;
+             display:flex;
+             align-items:center;
+             justify-content:center;
+             color:#fff;
+             font-size:12px;
+             text-align:center;
+           ">
+        ${room.name}
       </div>
-    `).join("")}
-  `;
+    `;
+  }
+
+  // =====================
+  // PLAYER MARKER
+  // =====================
+  const p = MAP_LAYOUT[currentRoom.id];
+
+  if (p) {
+    html += `
+      <div style="
+        position:absolute;
+        left:${p.x * size + padding + size / 2 + offsetX}px;
+        top:${p.y * size + padding + size / 2 + offsetY}px;
+        transform:translate(-50%, -50%);
+        width:10px;
+        height:10px;
+        border-radius:50%;
+        background:red;
+        box-shadow:0 0 10px red;
+      "></div>
+    `;
+  }
+
+  html += `</div>`;
+  mapPanel.innerHTML = html;
 }
 
 function updateHelpText() {
   let help = `Controls: W/A/S/D or arrows to move · E to inspect · X to pick up/drop · Q to cycle held item · L to light torch`;
   if (mapUnlocked) help += " · M to toggle map";
-  if (nearObject?.type === "glyph" && inventory.filter(item => item.type === "rosetta").length >= 3) {
-    help += " · D to decode glyphs";
+  if (nearObject?.type === "glyph" && hasFullTranslation()) {
+    help += " · G to decode glyphs";
   }
   helpText.textContent = help;
+}
+
+function renderGlyphNotebook() {
+  const entries = Object.entries(glyphKnowledge);
+
+  glyphPanel.innerHTML = `
+    <div class="notebook-title">Glyph Notebook</div>
+    <div class="notebook-sub">Decoded fragments of the ancient script</div>
+
+    <div class="notebook-grid">
+      ${
+        entries.length === 0
+          ? `<div class="note-entry">No glyphs decoded yet.</div>`
+          : entries.map(([glyph, meaning]) => `
+              <div class="note-entry">
+                <div class="glyph-big">${glyph}</div>
+                <div class="glyph-line">${meaning}</div>
+              </div>
+            `).join("")
+      }
+    </div>
+
+    <div style="margin-top:16px; opacity:0.6; font-size:12px;">
+      Press V to close
+    </div>
+  `;
+}
+
+function toggleNotebook() {
+  notebookOpen = !notebookOpen;
+
+  if (notebookOpen) {
+    glyphPanel.classList.remove("hidden");
+    renderGlyphNotebook();
+
+    // pause gameplay UI layers
+    setHUDVisible(false);
+    inspectState.active = false;
+    hideInspectUI();
+  } else {
+    glyphPanel.classList.add("hidden");
+    setHUDVisible(true);
+  }
+}
+
+function toggleMap() {
+  if (!mapUnlocked) return;
+
+  mapVisible = !mapVisible;
+
+  if (mapVisible) {
+    mapPanel.classList.remove("hidden");
+    renderMap();
+  } else {
+    mapPanel.classList.add("hidden");
+  }
 }
 
 function updateUI() {
   roomTitle.textContent = currentRoom.name;
 
   objectiveText.innerHTML = currentRoom.objectives
-    .map(o => `<div class="${o.done ? "done" : ""}">${o.done ? "✓" : "○"} ${o.label}</div>`)
-    .join("");
+  .map(o => {
+    const done = gameState.completedObjectives[o.id] || o.done;
+    return `<div class="${done ? "done" : ""}">${done ? "✓" : "○"} ${o.label}</div>`;
+  })
+  .join("");
 
   inventorySlots.forEach((slot, index) => {
     const item = inventory[index];
@@ -151,7 +343,7 @@ function updateUI() {
 // INPUT
 // =====================
 const keys = {};
-
+const glyphKnowledge = {}; 
 // =====================
 // WORLD + CAMERA
 // =====================
@@ -173,7 +365,7 @@ const cameraState = {
 const inspectState = {
   active: false,
   focus: null,
-  zoom: 15
+  zoom: 12
 };
 
 let gameTime = 0;
@@ -196,6 +388,50 @@ const player = {
 const inventory = [];
 const inventoryCapacity = 6;
 
+const GLYPH_SOLUTION = {
+  "𓂀": "L",
+  "𓄿": "I",
+  "𓈖": "G",
+  "𓏏": "H",
+  "𓊪": "T"
+};
+
+function learnGlyphs() {
+  for (const g in GLYPH_SOLUTION) {
+    glyphKnowledge[g] = GLYPH_SOLUTION[g];
+  }
+}
+const REQUIRED_GLYPHS = ["𓂀","𓄿","𓈖","𓏏","𓊪"];
+
+function hasFullTranslation() {
+  return REQUIRED_GLYPHS.every(g => playerGlyphMap[g]);
+}
+
+const playerGlyphMap = {};
+let glyphPanelOpen = false;
+
+function createDoor(config) {
+  return {
+    type: "door",
+
+    // required geometry
+    x: 0,
+    y: 0,
+    w: 30,
+    h: 120,
+
+    // defaults
+    locked: true,
+    opened: false,
+    opening: false,
+    openProgress: 0,
+
+    // optional overrides
+    ...config
+  };
+}
+
+
 const rooms = [
   {
     id: "burial-chamber",
@@ -203,7 +439,7 @@ const rooms = [
     description: "You awaken in a warm, dustless tomb. Stone statues and a sealed sarcophagus surround you.",
     objectives: [
       { id: "find-torch", label: "Find the torch and carry it.", done: false },
-      { id: "collect-rosetta", label: "Collect 3 Rosetta stone pieces.", done: false },
+      { id: "collect-rosetta", label: "Collect all Rosetta stone pieces.", done: false },
       { id: "decode-glyphs", label: "Decode the glyphs with the Rosetta pieces.", done: false },
       { id: "speak-ushabti", label: "Touch the ushabti to learn its message.", done: false }
     ],
@@ -265,74 +501,100 @@ const rooms = [
         h: 44,
         color: "#766551",
         text: "The glyphs are etched across the stone in ancient script.",
-        glyphText: "𓂀 𓄿 𓈖 𓍿 𓏏 𓊪",
+        glyphText: ["𓂀","𓄿","𓈖","𓏏","𓊪"],
         inspectDone: false
       },
       {
-        name: "Right Door",
-        type: "door",
-        x: 760,
-        y: 200,
-        w: 30,
-        h: 120,
-        color: "#4f3925",
-        locked: true,
-        direction: "right",
-        leadsTo: "right-room",
-        text: "A sealed east passage. The right door will open when this chamber is complete."
+        ...createDoor({
+          name: "Right Door",
+          x: 760,
+          y: 200,
+          color: "#4f3925",
+          direction: "right",
+          leadsTo: "right-room",
+          pairId: "burial-right",
+          text: "A sealed east passage. The right door will open when this chamber is complete."
+        }),
       },
       {
-        name: "Bottom Door",
-        type: "door",
-        x: 360,
-        y: 468,
-        w: 80,
-        h: 30,
-        color: "#4f3925",
-        locked: true,
-        direction: "down",
-        leadsTo: "bottom-room",
-        text: "A south passage blocked by a second chamber's seal.",
-        inspectDone: false
+        ...createDoor({
+          name: "Bottom Door",
+          x: 360,
+          y: 468,
+          w : 80,
+          h: 30,
+          color: "#4f3925",
+          locked: true,
+          direction: "down",
+          leadsTo: "bottom-room",
+          pairId: "burial-bottom",
+          text: "A south passage blocked by a second chamber's seal."
+        }),
       },
       {
-        name: "Rosetta Piece",
-        type: "rosetta",
-        x: 130,
-        y: 110,
-        w: 14,
-        h: 14,
-        color: "#b98d4f",
-        pickedUp: false,
-        glyphs: "𓂀𓄿",
-        sound: "a / ꜣ",
-        text: "A fragment of Rosetta stone carved with matching script."
-      },
-      {
-        name: "Rosetta Piece",
-        type: "rosetta",
-        x: 520,
-        y: 150,
-        w: 14,
-        h: 14,
-        color: "#b98d4f",
-        pickedUp: false,
-        glyphs: "𓈖𓍿",
-        sound: "n / t",
-        text: "A fragment of Rosetta stone carved with matching script."
-      },
-      {
-        name: "Rosetta Piece",
-        type: "rosetta",
+       name: "Rosetta Piece",
+       type: "rosetta",
+       x: 130,
+       y: 110,
+       w: 14,
+       h: 14,
+       color: "#b98d4f",
+       pickedUp: false,
+       glyph: "𓂀",
+       letter: "L",
+       text: "𓂀 → L (light begins with sight)"
+     },
+     {
+       name: "Rosetta Piece",
+       type: "rosetta",
+       x: 520,
+       y: 150,
+       w: 14,
+       h: 14,
+       color: "#b98d4f",
+       pickedUp: false,
+       glyph: "𓄿",
+       letter: "I",
+       text: "𓄿 → I (reed sound / breath of meaning)"
+     },
+     {
+       name: "Rosetta Piece",
+       type: "rosetta",
         x: 240,
-        y: 345,
-        w: 14,
-        h: 14,
-        color: "#b98d4f",
-        pickedUp: false,
-        glyphs: "𓏏𓊪",
-        sound: "t / p",
-        text: "A fragment of Rosetta stone carved with matching script."
+       y: 345,
+       w: 14,
+       h: 14,
+       color: "#b98d4f",
+       pickedUp: false,
+       glyph: "𓈖",
+       letter: "G",
+       text: "𓈖 → G (flowing water / continuity)"
+     },
+     {
+       name: "Rosetta Piece",
+       type: "rosetta",
+       x: 600,
+       y: 300,
+       w: 14,
+       h: 14,
+       color: "#b98d4f",
+       pickedUp: false,
+       glyph: "𓏏",
+       letter: "H",
+       text: "𓏏 → H (bread / completion of sound)"
+     },
+     {
+       name: "Rosetta Piece",
+       type: "rosetta",
+       x: 350,
+       y: 400,
+       w: 14,
+       h: 14,
+       color: "#b98d4f",
+       pickedUp: false,
+       glyph: "𓊪",
+       letter: "T",
+       text: "𓊪 → T (stool / final grounding)"
       }
     ],
     exit: null
@@ -342,9 +604,8 @@ const rooms = [
     name: "Antechamber",
     description: "The eastern chamber is narrower and lined with faded carvings. A soft glow breathes from the walls.",
     objectives: [
-      { id: "find-tablet", label: "Find the stone tablet.", done: false },
+      { id: "find-scroll", label: "Find the scroll.", done: false },
       { id: "read-tablet", label: "Read the tablet's translation.", done: false },
-      { id: "unlock-south-passage", label: "Unlock the southern passage from the burial chamber.", done: false }
     ],
     objects: [
       {
@@ -357,6 +618,7 @@ const rooms = [
         color: "#4f3925",
         locked: false,
         direction: "left",
+        pairId: "burial-right",
         leadsTo: "burial-chamber",
         text: "The opening back to the burial chamber."
       },
@@ -404,6 +666,7 @@ const rooms = [
         color: "#4f3925",
         locked: false,
         direction: "up",
+        pairId: "burial-bottom",
         leadsTo: "burial-chamber",
         text: "The stair back up to the burial chamber."
       },
@@ -433,8 +696,22 @@ const rooms = [
   }
 ];
 
+
 let currentRoom = rooms[0];
 let nearObject = null;
+
+function initRooms() {
+  for (const room of rooms) {
+    room.visited = false;
+  }
+}
+
+initRooms();
+currentRoom.visited = true;
+
+
+
+
 
 function getCurrentObjects() {
   return currentRoom.objects;
@@ -444,9 +721,17 @@ function findObjectByType(type, filter) {
   return getCurrentObjects().find(item => item.type === type && (!filter || filter(item)));
 }
 
+function getCollidingDoor() {
+  return getCurrentObjects().find(obj =>
+    obj.type === "door" &&
+    isColliding(player, obj)
+  );
+}
+
 function findDoorByDirection(direction) {
   return findObjectByType("door", door => door.direction === direction);
 }
+
 
 function checkProximity() {
   nearObject = null;
@@ -467,6 +752,10 @@ function checkProximity() {
 }
 
 function addToInventory(obj) {
+  if (!obj.hasBeenInspected) {
+    ui.textContent = "You need to inspect this first.";
+    return false;
+  }
   if (inventory.length >= inventoryCapacity) {
     ui.textContent = "Your inventory is full.";
     return false;
@@ -482,14 +771,43 @@ function addToInventory(obj) {
   }
 
   if (obj.type === "rosetta") {
-    const pieces = inventory.filter(item => item.type === "rosetta").length;
-    if (pieces >= 3) {
-      markObjective("collect-rosetta");
-    }
+  Object.assign(playerGlyphMap, { [obj.glyph]: obj.letter });
+  glyphKnowledge[obj.glyph] = obj.letter;
+
+  ui.textContent = `Decoded fragment: ${obj.glyph} → ${obj.letter}`;
+
+  // DO NOT open notebook here anymore
+  // DO NOT render notebook here anymore
+
+  if (hasFullTranslation()) {
+    markObjective("collect-rosetta");
   }
+}
 
   updateUI();
   return true;
+}
+
+function consumeRosettaPieces() {
+  const objs = currentRoom.objects;
+
+  for (let i = objs.length - 1; i >= 0; i--) {
+    const obj = objs[i];
+
+    if (obj.type === "rosetta" && obj.pickedUp) {
+      objs.splice(i, 1);
+    }
+  }
+
+  // also clear inventory entries
+  for (let i = inventory.length - 1; i >= 0; i--) {
+    if (inventory[i].type === "rosetta") {
+      inventory.splice(i, 1);
+    }
+  }
+
+  player.heldItem = inventory[player.inventoryIndex] || null;
+  updateUI();
 }
 
 function dropActiveItem() {
@@ -525,10 +843,21 @@ function cycleInventory(direction) {
 }
 
 function markObjective(id) {
+  gameState.completedObjectives[id] = true;
+
   const objective = currentRoom.objectives.find(o => o.id === id);
-  if (objective) {
-    objective.done = true;
-    updateUI();
+  if (objective) objective.done = true;
+
+  updateUI();
+}
+
+function syncObjectivesFromGameState() {
+  for (const room of rooms) {
+    for (const obj of room.objectives) {
+      if (gameState.completedObjectives[obj.id]) {
+        obj.done = true;
+      }
+    }
   }
 }
 
@@ -541,9 +870,12 @@ function attemptDoorUnlock(door) {
   if (!door) return;
 
   if (door.direction === "right") {
-    const allDone = currentRoom.objectives.every(o => o.done);
+    const allDone = currentRoom.objectives.every(
+  o => gameState.completedObjectives[o.id]
+);
     if (allDone) {
       door.locked = false;
+      door.opening = true;
       mapUnlocked = true;
       ui.textContent = "The eastern passage swings open. A map toggle is now available.";
       updateUI();
@@ -554,22 +886,30 @@ function attemptDoorUnlock(door) {
   }
 
   if (door.direction === "down") {
-    const secondRoom = rooms.find(r => r.id === "right-room");
-    const secondComplete = secondRoom.objectives.every(o => o.done);
-    if (secondComplete) {
-      door.locked = false;
-      ui.textContent = "The southern passage loosens its seal. You may return here when ready.";
-      updateUI();
-      return;
-    }
-    ui.textContent = "This passage remains sealed until the eastern chamber's tasks are finished.";
+  const secondRoom = rooms.find(r => r.id === "right-room");
+
+  const secondComplete = secondRoom.objectives.every(
+    o => gameState.completedObjectives[o.id]
+  );
+
+  if (secondComplete) {
+    door.locked = false;
+    door.opening = true;
+    ui.textContent = "The southern passage loosens its seal. You may return here when ready.";
+    updateUI();
     return;
   }
+
+  ui.textContent = "This passage remains sealed until the eastern chamber's tasks are finished.";
+  return;
+}
 
   ui.textContent = door.locked ? "The door is sealed." : "The door stands open.";
 }
 function inspectObject(obj) {
   if (!obj) return;
+  obj.hasBeenInspected = true;
+
   showInspectUI(obj);
 
   if (obj.type === "ushabti" && !obj.inspectDone) {
@@ -578,25 +918,54 @@ function inspectObject(obj) {
   }
 
   if (obj.type === "glyph") {
-    if (!obj.inspectDone) {
-      obj.inspectDone = true;
-    }
-    const pieces = inventory.filter(item => item.type === "rosetta").length;
+    const partial = obj.glyphText
+      .map(g => playerGlyphMap[g] || "?")
+      .join("");
+
     if (glyphDecoded) {
-      ui.textContent = "The glyphs resolve clearly: LIGHT AND TRUTH OPEN THE EASTERN PASSAGE.";
-    } else if (pieces >= 3) {
-      ui.textContent = "You can now press D to decode the stone with the Rosetta fragments.";
+      ui.textContent = "The glyphs resolve clearly: LIGHT.";
     } else {
-      ui.textContent = `The glyphs remain mysterious. You need ${3 - pieces} more Rosetta piece(s).`;
+      ui.textContent = `Inscription: ${partial}`;
+
+      if (hasFullTranslation()) {
+        ui.textContent += " — You now understand the full word. Press G to finalize.";
+      }
     }
   }
 
-  if (obj.type === "tablet" && !obj.inspectDone) {
+  if (obj.type === "scroll" && !obj.inspectDone) {
     obj.inspectDone = true;
-    markObjective("find-tablet");
-    markObjective("read-tablet");
-    markObjective("unlock-south-passage");
-    ui.textContent = "You decipher the translation tablet and can now unlock the southern passage.";
+    markObjective("find-scroll");
+    ui.textContent = "An old scroll. It explains how to interpret the tablet.";
+  }
+
+  if (obj.type === "tablet" && !obj.inspectDone) {
+    const scroll = inventory.find(i => i.type === "scroll");
+
+    if (!scroll) {
+      ui.textContent = "You cannot understand the tablet without first finding the scroll.";
+      return;
+    }
+
+    obj.inspectDone = true;
+    const objState = currentRoom.objectives.find(o => o.id === "read-tablet");
+    if (!objState.done) {
+       markObjective("read-tablet");
+    }
+
+    removeItemFromInventory("scroll");
+
+    ui.textContent =
+      "With the scroll’s guidance, the tablet can now be deciphered. The scroll crumbles to dust.";
+
+    // unlock glyph notebook AFTER learning system
+     notebookOpen = false; // stays closed by default
+     glyphPanel.classList.add("hidden");
+
+// optional flag so player knows it's unlocked
+     glyphNotebookUnlocked = true;
+
+    ui.textContent = "You can now study the glyph notebook (V).";
   }
 
   if (obj.type === "door") {
@@ -604,14 +973,16 @@ function inspectObject(obj) {
   }
 
   if (obj.type === "amulet" && !obj.pickedUp) {
-    addToInventory(obj);
+    markObjective("find-amulet");
   }
 
   if (obj.type === "altar" && currentRoom.id === "bottom-room") {
     const amulet = inventory.find(item => item.type === "amulet");
+
     if (amulet) {
       inventory.splice(inventory.indexOf(amulet), 1);
       player.heldItem = null;
+
       markObjective("offer-amulet");
       ui.textContent = "The amulet settles into the altar with a soft glow.";
       updateUI();
@@ -621,25 +992,28 @@ function inspectObject(obj) {
   }
 }
 
+
 function decodeGlyphs(obj) {
-  const pieces = inventory.filter(item => item.type === "rosetta").length;
-  if (pieces < 3) {
-    ui.textContent = "You need three Rosetta fragments before the glyphs can be fully decoded.";
+  if (!hasFullTranslation()) {
+    ui.textContent = "You have not fully deciphered the glyphs yet.";
     return;
   }
 
   if (glyphDecoded) {
-    ui.textContent = "You already decoded the stone: LIGHT AND TRUTH OPEN THE EASTERN PASSAGE.";
+    ui.textContent = "You already decoded the word: LIGHT.";
     return;
   }
 
   glyphDecoded = true;
   markObjective("decode-glyphs");
+  learnGlyphs();
+  consumeRosettaPieces();
+
   if (obj) {
     showInspectUI(obj);
-    ui.innerHTML += `<div>The glyphs resolve as you align the fragments: LIGHT AND TRUTH OPEN THE EASTERN PASSAGE.</div>`;
+    ui.innerHTML += `<div>The glyphs resolve: LIGHT.</div>`;
   } else {
-    ui.textContent = "The glyphs resolve as you align the fragments: LIGHT AND TRUTH OPEN THE EASTERN PASSAGE.";
+    ui.textContent = "The glyphs resolve: LIGHT.";
   }
 }
 
@@ -647,48 +1021,100 @@ window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   keys[k] = true;
 
+  if (k === "v") {
+  if (!glyphNotebookUnlocked) {
+    ui.textContent = "You don't yet understand how to read these symbols.";
+    return;
+  }
+  toggleNotebook();
+}
+
   if (k === "e" || k === "escape") {
+
+    // =====================
+    // CLOSE INSPECT MODE
+    // =====================
     if (inspectState.active) {
       inspectState.active = false;
       inspectState.focus = null;
+
       cameraState.targetZoom = 1;
       hideInspectUI();
-    } else if (nearObject) {
+      setHUDVisible(true);
+
+
+    } 
+    // =====================
+    // OPEN INSPECT MODE
+    // =====================
+    else if (nearObject) {
       inspectState.active = true;
       inspectState.focus = nearObject;
+
+      
+
       cameraState.targetZoom = inspectState.zoom;
       inspectObject(nearObject);
+      setHUDVisible(false);
     }
   }
 
+  // =====================
+  // PICK UP / DROP
+  // =====================
   if (k === "x") {
-    if (nearObject && ["torch", "rosetta", "scroll", "amulet"].includes(nearObject.type) && !nearObject.pickedUp) {
+    if (
+      nearObject &&
+      ["torch", "rosetta", "scroll", "amulet"].includes(nearObject.type) &&
+      !nearObject.pickedUp
+    ) {
       addToInventory(nearObject);
     } else if (inventory.length > 0) {
       dropActiveItem();
     }
   }
 
-  if (k === "d") {
-    if ((nearObject && nearObject.type === "glyph") || (inspectState.active && inspectState.focus?.type === "glyph")) {
+  // =====================
+  // GLYPH DECODE
+  // =====================
+  if (k === "g") {
+    if (
+      (nearObject && nearObject.type === "glyph") ||
+      (inspectState.active && inspectState.focus?.type === "glyph")
+    ) {
       decodeGlyphs(nearObject || inspectState.focus);
     }
   }
 
+  // =====================
+  // INVENTORY CYCLE
+  // =====================
   if (k === "q") {
     cycleInventory(1);
   }
 
+   if (k === "m") {
+     if (!mapUnlocked) return;
+     toggleMap();
+   }
+
+  // =====================
+  // TORCH TOGGLE
+  // =====================
   if (k === "l") {
     if (player.heldItem?.type === "torch") {
       player.lampOn = !player.lampOn;
-      ui.textContent = player.lampOn ? "The torch flares to life." : "The torch dims.";
+      ui.textContent = player.lampOn
+        ? "The torch flares to life."
+        : "The torch dims.";
     }
   }
 });
 
+
 window.addEventListener("keyup", (e) => {
-  keys[e.key.toLowerCase()] = false;
+  const k = e.key.toLowerCase();
+  keys[k] = false;
 });
 
 function isColliding(a, b) {
@@ -703,6 +1129,7 @@ function isColliding(a, b) {
 }
 
 function update() {
+  if (notebookOpen) return;
   let nextX = player.x;
   let nextY = player.y;
 
@@ -731,7 +1158,8 @@ function update() {
     nextX > world.width - player.size ||
     nextY > world.height - player.size
   ) {
-    return;
+    nextX = Math.max(0, Math.min(world.width - player.size, nextX));
+    nextY = Math.max(0, Math.min(world.height - player.size, nextY));
   }
 
   const testPlayer = { x: nextX, y: nextY };
@@ -741,6 +1169,10 @@ function update() {
   for (const obj of getCurrentObjects()) {
     if (obj.pickedUp) continue;
     if (obj.type === "torch") continue;
+
+    if (obj.type === "door") {
+      if (!obj.locked && obj.openProgress >= 1) continue;
+      }
 
     if (isColliding(testPlayer, obj)) {
       return;
@@ -764,9 +1196,38 @@ function update() {
   player.x = nextX;
   player.y = nextY;
 
-  const door = getCurrentObjects().find(obj => obj.type === "door" && !obj.locked && isColliding(player, obj));
-  if (door) {
-    transitionRoom(door);
+
+
+}
+
+  function updateDoors() {
+  for (const obj of getCurrentObjects()) {
+    if (obj.type !== "door") continue;
+
+    if (obj.opening) {
+      obj.openProgress += 0.05;
+
+      if (obj.openProgress >= 1) {
+        obj.openProgress = 1;
+        obj.opening = false;
+        obj.opened = true;
+      }
+    }
+  }
+}
+
+function checkDoorTransition() {
+  for (const obj of getCurrentObjects()) {
+    if (obj.type !== "door" || obj.locked) continue;
+
+    const dx = (player.x - (obj.x + obj.w / 2));
+    const dy = (player.y - (obj.y + obj.h / 2));
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+   if (dist < 25) {
+     transitionRoom(obj);
+     return;
+  }
   }
 }
 
@@ -820,17 +1281,44 @@ function updateTorchPhysics() {
 function transitionRoom(door) {
   if (!door || door.locked) return;
 
-  const nextRoom = rooms.find(room => room.id === door.leadsTo);
+  const nextRoom = rooms.find(r => r.id === door.leadsTo);
   if (!nextRoom) return;
 
   currentRoom = nextRoom;
-  player.x = nextRoom.id === "right-room" ? 100 : 360;
-  player.y = nextRoom.id === "bottom-room" ? 350 : 250;
-  player.heldItem = null;
-  player.lampOn = false;
-  ui.textContent = nextRoom.id === "right-room"
-    ? "You step through the opening and enter the antechamber beyond."
-    : "You descend into the sepulcher depths, where the air thickens with ancient power.";
+  currentRoom.visited = true;
+  
+  syncObjectivesFromGameState();
+
+  // find matching door in target room
+  const matchingDoor = currentRoom.objects.find(
+    obj => obj.type === "door" && obj.pairId === door.pairId
+  );
+
+  if (matchingDoor) {
+    const cx = matchingDoor.x + matchingDoor.w / 2;
+    const cy = matchingDoor.y + matchingDoor.h / 2;
+
+    if (matchingDoor.direction === "left") {
+      player.x = matchingDoor.x + matchingDoor.w + 20;
+      player.y = cy;
+    }
+
+    if (matchingDoor.direction === "right") {
+      player.x = matchingDoor.x - 20;
+      player.y = cy;
+    }
+
+    if (matchingDoor.direction === "up") {
+      player.x = cx;
+      player.y = matchingDoor.y + matchingDoor.h + 20;
+    }
+
+    if (matchingDoor.direction === "down") {
+      player.x = cx;
+      player.y = matchingDoor.y - 20;
+    }
+  }
+
   updateUI();
 }
 
@@ -891,75 +1379,167 @@ function drawTomb() {
   }
 }
 
+
 function drawObjects() {
   for (const obj of getCurrentObjects()) {
     if (obj.pickedUp) continue;
 
+    ctx.save(); // IMPORTANT: isolate every object
+
+    // highlight proximity
+    const highlight = obj === nearObject ? "#f9d342" : obj.color;
+
+    // =====================
+    // BASE OBJECT TYPES
+    // =====================
+
     if (obj.type === "sarcophagus") {
       ctx.fillStyle = obj.color;
       ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+
       ctx.fillStyle = "#735b39";
       ctx.fillRect(obj.x, obj.y, obj.w, 10);
+
       ctx.strokeStyle = "#3f2d1f";
       ctx.lineWidth = 2;
+
       ctx.beginPath();
       ctx.moveTo(obj.x + 10, obj.y + 20);
       ctx.lineTo(obj.x + obj.w - 10, obj.y + 20);
       ctx.stroke();
+
       ctx.beginPath();
       ctx.rect(obj.x + 18, obj.y + 8, 18, 16);
       ctx.stroke();
+
       ctx.beginPath();
       ctx.rect(obj.x + 58, obj.y + 8, 18, 16);
       ctx.stroke();
+
       ctx.fillStyle = "#4d3b26";
       ctx.fillRect(obj.x + 36, obj.y + 12, 28, 8);
-    } else if (obj.type === "ushabti") {
-      ctx.fillStyle = obj === nearObject ? "#f9d342" : obj.color;
-      const bodyX = obj.x;
-      const bodyY = obj.y;
-      const bodyW = obj.w;
-      const bodyH = obj.h;
-      ctx.fillRect(bodyX, bodyY + 6, bodyW, bodyH - 6);
+    }
+
+    else if (obj.type === "ushabti") {
+      ctx.fillStyle = highlight;
+
+      ctx.fillRect(obj.x, obj.y + 6, obj.w, obj.h - 6);
+
       ctx.fillStyle = "#4a4845";
-      ctx.fillRect(bodyX - 2, bodyY + 6, bodyW + 4, 4);
+      ctx.fillRect(obj.x - 2, obj.y + 6, obj.w + 4, 4);
+
       ctx.fillStyle = "#807060";
       ctx.beginPath();
-      ctx.ellipse(bodyX + bodyW / 2, bodyY + 5, bodyW / 1.5, 6, 0, 0, Math.PI * 2);
+      ctx.ellipse(obj.x + obj.w / 2, obj.y + 5, obj.w / 1.5, 6, 0, 0, Math.PI * 2);
       ctx.fill();
+
       ctx.strokeStyle = "#3e3a31";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(bodyX + 3, bodyY + 18);
-      ctx.lineTo(bodyX + bodyW - 3, bodyY + 18);
+      ctx.moveTo(obj.x + 3, obj.y + 18);
+      ctx.lineTo(obj.x + obj.w - 3, obj.y + 18);
       ctx.stroke();
-    } else if (obj.type === "rosetta") {
-      ctx.fillStyle = obj === nearObject ? "#f9d342" : obj.color;
+    }
+
+    else if (obj.type === "rosetta") {
+      ctx.fillStyle = highlight;
       ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-      ctx.fillStyle = "#3e2f1f";
-      ctx.font = "12px serif";
+
+      ctx.strokeStyle = "#3e2f1f";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+
+      ctx.fillStyle = "#2a1f11";
+      ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(obj.glyphs || "𓂀𓄿", obj.x + 2, obj.y + obj.h / 2);
-    } else if (obj.type === "glyph") {
+
+      const fontSize = Math.min(obj.w, obj.h) * 0.9;
+      ctx.font = `${fontSize}px serif`;
+
+      ctx.fillText(obj.glyph || "𓂀", obj.x + obj.w / 2, obj.y + obj.h / 2);
+
+      const letter = playerGlyphMap[obj.glyph];
+      if (letter) {
+        ctx.font = `${fontSize * 0.5}px monospace`;
+        ctx.fillStyle = "#d6c48a";
+        ctx.fillText(letter, obj.x + obj.w / 2, obj.y + obj.h + 8);
+      }
+    }
+
+    else if (obj.type === "glyph") {
       ctx.fillStyle = obj.color;
       ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+
+      ctx.strokeStyle = "#3e2f1f";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+
+      const glyphs = obj.glyphText || [];
+      const count = glyphs.length || 1;
+
+      const padding = 6;
+      const usableWidth = obj.w - padding * 2;
+      const spacing = usableWidth / count;
+
+      const fontSize = Math.min(obj.h * 0.6, spacing * 0.9);
+
       ctx.fillStyle = "#2a1f11";
-      ctx.font = "16px serif";
+      ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(obj.glyphText || "𓂀𓄿𓈖", obj.x + 6, obj.y + obj.h / 2);
-    } else {
-      ctx.fillStyle = obj === nearObject ? "#f9d342" : obj.color;
+      ctx.font = `${fontSize}px serif`;
+
+      for (let i = 0; i < count; i++) {
+        const g = glyphs[i];
+        const x = obj.x + padding + spacing * (i + 0.5);
+        const y = obj.y + obj.h / 2;
+
+        ctx.fillText(g, x, y);
+
+        const letter = playerGlyphMap[g];
+        if (letter) {
+          ctx.font = `${fontSize * 0.45}px monospace`;
+          ctx.fillStyle = "#d6c48a";
+          ctx.fillText(letter, x, y + fontSize * 0.65);
+          ctx.font = `${fontSize}px serif`;
+          ctx.fillStyle = "#2a1f11";
+        }
+      }
+    }
+
+    else if (obj.type !== "door" && obj.type !== "torch") {
+      ctx.fillStyle = highlight;
       ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
     }
 
-    if (obj.type === "door" && obj.locked) {
-      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
-      ctx.fillRect(obj.x + 6, obj.y + 30, obj.w - 12, obj.h - 60);
+    // =====================
+    // DOORS (separate layer logic)
+    // =====================
+    if (obj.type === "door") {
+      let offset = 0;
+
+      if (!obj.locked && obj.openProgress > 0) {
+        const dir = obj.direction;
+
+        if (dir === "right") offset = obj.openProgress * obj.w;
+        if (dir === "left") offset = -obj.openProgress * obj.w;
+        if (dir === "down") offset = obj.openProgress * obj.h;
+        if (dir === "up") offset = -obj.openProgress * obj.h;
+      }
+
+      const x = obj.x + (obj.direction === "left" || obj.direction === "right" ? offset : 0);
+      const y = obj.y + (obj.direction === "up" || obj.direction === "down" ? offset : 0);
+
+      ctx.fillStyle = obj.locked ? "#4f3925" : "#7a6a4f";
+      ctx.fillRect(x, y, obj.w, obj.h);
     }
 
-    if (obj.type === "torch" && obj.pickedUp === false) {
+    // =====================
+    // TORCHES
+    // =====================
+    if (obj.type === "torch" && !obj.pickedUp) {
       ctx.fillStyle = "#c9a24a";
       ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+
       ctx.fillStyle = "#ffb84d";
       ctx.beginPath();
       ctx.moveTo(obj.x + obj.w / 2, obj.y - 6);
@@ -968,6 +1548,8 @@ function drawObjects() {
       ctx.closePath();
       ctx.fill();
     }
+
+    ctx.restore(); // IMPORTANT
   }
 }
 
@@ -990,41 +1572,48 @@ function drawPlayer() {
     }
   }
 }
+function setHUDVisible(visible) {
+  document.getElementById("quest-panel").style.display = visible ? "block" : "none";
+  document.getElementById("inventory-grid").style.display = visible ? "grid" : "none";
+
+  if (!visible) {
+    mapPanel.classList.add("hidden");
+    mapVisible = false;
+  }
+}
 
 function drawLighting() {
-  const baseRadius = player.lampOn ? 200 : 40;
-  const pulse = 1 + Math.sin(gameTime * 2.5) * 0.15;
+  const baseRadius = player.lampOn ? 200 : 60;
+  const pulse = 1 + Math.sin(gameTime * 2.5) * 0.12;
   const radius = baseRadius * pulse;
-  const ambient = player.lampOn ? 0.62 : 0.68;
+
+  // MUCH lighter than before (this is the real fix)
+  const ambient = player.lampOn ? 0.55 : 0.65;
 
   ctx.save();
+
+  // simple dark overlay
+  ctx.globalCompositeOperation = "source-over";
   ctx.fillStyle = `rgba(0, 0, 0, ${ambient})`;
   ctx.fillRect(0, 0, world.width, world.height);
 
-  const gradient = ctx.createRadialGradient(player.x, player.y, radius * 0.12, player.x, player.y, radius);
-  const inner = player.lampOn ? "rgba(255, 230, 150, 0.98)" : "rgba(255, 245, 190, 0.98)";
-  const middle = player.lampOn ? "rgba(255, 195, 90, 0.32)" : "rgba(255, 235, 160, 0.28)";
-  const outer = player.lampOn ? "rgba(255, 155, 40, 0)" : "rgba(255, 235, 160, 0)";
+  // soft reveal (no destructive blending)
+  ctx.globalCompositeOperation = "lighter";
 
-  gradient.addColorStop(0, inner);
-  gradient.addColorStop(0.35, middle);
-  gradient.addColorStop(1, outer);
+  const light = ctx.createRadialGradient(
+    player.x, player.y, radius * 0.1,
+    player.x, player.y, radius
+  );
 
-  ctx.globalCompositeOperation = "destination-out";
-  ctx.fillStyle = gradient;
+  light.addColorStop(0, "rgba(255, 240, 200, 0.25)");
+  light.addColorStop(0.5, "rgba(255, 210, 140, 0.10)");
+  light.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+  ctx.fillStyle = light;
   ctx.beginPath();
   ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore();
 
-  ctx.save();
-  const haloGradient = ctx.createRadialGradient(player.x, player.y, radius * 0.25, player.x, player.y, radius * 1.05);
-  haloGradient.addColorStop(0, player.lampOn ? "rgba(255, 240, 180, 0.18)" : "rgba(255, 245, 190, 0.14)");
-  haloGradient.addColorStop(1, "rgba(255, 190, 80, 0)");
-  ctx.fillStyle = haloGradient;
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, radius * 1.05, 0, Math.PI * 2);
-  ctx.fill();
   ctx.restore();
 }
 
@@ -1033,6 +1622,7 @@ function loop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   update();
+  updateDoors();
   updateCamera();
   checkProximity();
 
@@ -1046,6 +1636,10 @@ function loop() {
   drawObjects();
   drawPlayer();
   drawLighting();
+  checkDoorTransition();
+  if (mapVisible) {
+  renderMap();
+}
 
   requestAnimationFrame(loop);
 }
