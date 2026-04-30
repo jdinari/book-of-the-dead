@@ -1,7 +1,7 @@
 // =====================
 // ENGINE.JS
 // Game loop, input handling, physics, drawing,
-// camera, collision, room transitions.
+// camera, collision, and room transitions.
 // Depends on: state.js, rooms.js, ui.js, inventory.js, objectives.js
 // =====================
 
@@ -25,13 +25,13 @@ window.addEventListener("keydown", (e) => {
   if (k === "e" || k === "escape") {
     if (inspectState.active) {
       inspectState.active = false;
-      inspectState.focus = null;
+      inspectState.focus  = null;
       cameraState.targetZoom = 1;
       hideInspectUI();
       setHUDVisible(true);
     } else if (nearObject) {
       inspectState.active = true;
-      inspectState.focus = nearObject;
+      inspectState.focus  = nearObject;
       cameraState.targetZoom = inspectState.zoom;
       inspectObject(nearObject);
       setHUDVisible(false);
@@ -62,9 +62,7 @@ window.addEventListener("keydown", (e) => {
   }
 
   // INVENTORY CYCLE
-  if (k === "q") {
-    cycleInventory(1);
-  }
+  if (k === "q") cycleInventory(1);
 
   // MAP TOGGLE
   if (k === "m") {
@@ -120,15 +118,17 @@ function update() {
   const moveX = nextX - player.x;
   const moveY = nextY - player.y;
 
+  // solid-object collision
   for (const obj of getCurrentObjects()) {
     if (obj.pickedUp) continue;
     if (obj.type === "torch") continue;
     if (obj.type === "door" && !obj.locked && obj.openProgress >= 1) continue;
+   //if (obj.type === "decoration") continue;   // decorations are not solid
 
     if (isColliding({ x: nextX, y: nextY }, obj)) return;
   }
 
-  // push torch
+  // push torch with player movement
   for (const obj of getCurrentObjects()) {
     if (obj.pickedUp || obj.type !== "torch") continue;
 
@@ -152,15 +152,13 @@ function update() {
 // =====================
 function updateDoors() {
   for (const obj of getCurrentObjects()) {
-    if (obj.type !== "door") continue;
+    if (obj.type !== "door" || !obj.opening) continue;
 
-    if (obj.opening) {
-      obj.openProgress += 0.05;
-      if (obj.openProgress >= 1) {
-        obj.openProgress = 1;
-        obj.opening = false;
-        obj.opened  = true;
-      }
+    obj.openProgress += 0.05;
+    if (obj.openProgress >= 1) {
+      obj.openProgress = 1;
+      obj.opening = false;
+      obj.opened  = true;
     }
   }
 }
@@ -222,11 +220,13 @@ function updateTorchPhysics() {
     obj.vx *= obj.friction;
     obj.vy *= obj.friction;
 
-    if (obj.x < 0)                  { obj.x = 0;                  obj.vx *= -0.5; }
-    if (obj.x + obj.w > world.width) { obj.x = world.width - obj.w; obj.vx *= -0.5; }
-    if (obj.y < 0)                  { obj.y = 0;                  obj.vy *= -0.5; }
-    if (obj.y + obj.h > world.height){ obj.y = world.height - obj.h; obj.vy *= -0.5; }
+    // world bounds bounce
+    if (obj.x < 0)                   { obj.x = 0;                   obj.vx *= -0.5; }
+    if (obj.x + obj.w > world.width)  { obj.x = world.width - obj.w;  obj.vx *= -0.5; }
+    if (obj.y < 0)                   { obj.y = 0;                   obj.vy *= -0.5; }
+    if (obj.y + obj.h > world.height) { obj.y = world.height - obj.h; obj.vy *= -0.5; }
 
+    // bounce off other objects
     for (const other of getCurrentObjects()) {
       if (other === obj || other.type === "torch" || other.pickedUp) continue;
 
@@ -275,9 +275,9 @@ function updateCamera() {
   let targetX, targetY;
 
   if (inspectState.active && inspectState.focus) {
-    const focus = inspectState.focus;
-    targetX = focus.x + focus.w / 2 - canvas.width  / (2 * zoom);
-    targetY = focus.y + focus.h / 2 - canvas.height / (2 * zoom);
+    const f = inspectState.focus;
+    targetX = f.x + f.w / 2 - canvas.width  / (2 * zoom);
+    targetY = f.y + f.h / 2 - canvas.height / (2 * zoom);
   } else {
     targetX = player.x + player.size / 2 - canvas.width  / (2 * zoom);
     targetY = player.y + player.size / 2 - canvas.height / (2 * zoom);
@@ -310,6 +310,7 @@ function drawTomb() {
   ctx.fillRect(0, world.height * 0.6, world.width, world.height * 0.4);
 
   ctx.strokeStyle = "#1f1d1a";
+  ctx.lineWidth = 1;
   for (let x = 0; x < world.width; x += 40) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, world.height); ctx.stroke();
   }
@@ -328,141 +329,111 @@ function drawObjects() {
 
     const highlight = obj === nearObject ? "#f9d342" : obj.color;
 
-    if (obj.type === "sarcophagus") {
-      ctx.fillStyle = obj.color;
-      ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+    switch (obj.type) {
 
-      ctx.fillStyle = "#735b39";
-      ctx.fillRect(obj.x, obj.y, obj.w, 10);
-
-      ctx.strokeStyle = "#3f2d1f";
-      ctx.lineWidth = 2;
-
-      ctx.beginPath();
-      ctx.moveTo(obj.x + 10, obj.y + 20);
-      ctx.lineTo(obj.x + obj.w - 10, obj.y + 20);
-      ctx.stroke();
-
-      ctx.beginPath(); ctx.rect(obj.x + 18, obj.y + 8, 18, 16); ctx.stroke();
-      ctx.beginPath(); ctx.rect(obj.x + 58, obj.y + 8, 18, 16); ctx.stroke();
-
-      ctx.fillStyle = "#4d3b26";
-      ctx.fillRect(obj.x + 36, obj.y + 12, 28, 8);
-    }
-
-    else if (obj.type === "ushabti") {
-      ctx.fillStyle = highlight;
-      ctx.fillRect(obj.x, obj.y + 6, obj.w, obj.h - 6);
-
-      ctx.fillStyle = "#4a4845";
-      ctx.fillRect(obj.x - 2, obj.y + 6, obj.w + 4, 4);
-
-      ctx.fillStyle = "#807060";
-      ctx.beginPath();
-      ctx.ellipse(obj.x + obj.w / 2, obj.y + 5, obj.w / 1.5, 6, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = "#3e3a31";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(obj.x + 3, obj.y + 18);
-      ctx.lineTo(obj.x + obj.w - 3, obj.y + 18);
-      ctx.stroke();
-    }
-
-    else if (obj.type === "rosetta") {
-      ctx.fillStyle = highlight;
-      ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-
-      ctx.strokeStyle = "#3e2f1f";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
-
-      ctx.fillStyle = "#2a1f11";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      const fontSize = Math.min(obj.w, obj.h) * 0.9;
-      ctx.font = `${fontSize}px serif`;
-      ctx.fillText(obj.glyph || "𓂀", obj.x + obj.w / 2, obj.y + obj.h / 2);
-
-      const letter = playerGlyphMap[obj.glyph];
-      if (letter) {
-        ctx.font = `${fontSize * 0.5}px monospace`;
-        ctx.fillStyle = "#d6c48a";
-        ctx.fillText(letter, obj.x + obj.w / 2, obj.y + obj.h + 8);
+      case "sarcophagus": {
+        ctx.fillStyle = obj.color;
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        ctx.fillStyle = "#735b39";
+        ctx.fillRect(obj.x, obj.y, obj.w, 10);
+        ctx.strokeStyle = "#3f2d1f"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(obj.x + 10, obj.y + 20); ctx.lineTo(obj.x + obj.w - 10, obj.y + 20); ctx.stroke();
+        ctx.beginPath(); ctx.rect(obj.x + 18, obj.y + 8, 18, 16); ctx.stroke();
+        ctx.beginPath(); ctx.rect(obj.x + 58, obj.y + 8, 18, 16); ctx.stroke();
+        ctx.fillStyle = "#4d3b26"; ctx.fillRect(obj.x + 36, obj.y + 12, 28, 8);
+        break;
       }
-    }
 
-    else if (obj.type === "glyph") {
-      ctx.fillStyle = obj.color;
-      ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+      case "ushabti": {
+        ctx.fillStyle = highlight;
+        ctx.fillRect(obj.x, obj.y + 6, obj.w, obj.h - 6);
+        ctx.fillStyle = "#4a4845";
+        ctx.fillRect(obj.x - 2, obj.y + 6, obj.w + 4, 4);
+        ctx.fillStyle = "#807060";
+        ctx.beginPath(); ctx.ellipse(obj.x + obj.w / 2, obj.y + 5, obj.w / 1.5, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#3e3a31"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(obj.x + 3, obj.y + 18); ctx.lineTo(obj.x + obj.w - 3, obj.y + 18); ctx.stroke();
+        break;
+      }
 
-      ctx.strokeStyle = "#3e2f1f";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
-
-      const glyphs   = obj.glyphText || [];
-      const count    = glyphs.length || 1;
-      const padding  = 6;
-      const usableW  = obj.w - padding * 2;
-      const spacing  = usableW / count;
-      const fontSize = Math.min(obj.h * 0.6, spacing * 0.9);
-
-      ctx.fillStyle = "#2a1f11";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = `${fontSize}px serif`;
-
-      for (let i = 0; i < count; i++) {
-        const g = glyphs[i];
-        const x = obj.x + padding + spacing * (i + 0.5);
-        const y = obj.y + obj.h / 2;
-
-        ctx.fillText(g, x, y);
-
-        const letter = playerGlyphMap[g];
+      case "rosetta": {
+        ctx.fillStyle = highlight;
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        ctx.strokeStyle = "#3e2f1f"; ctx.lineWidth = 1;
+        ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+        const rFontSize = Math.min(obj.w, obj.h) * 0.9;
+        ctx.fillStyle = "#2a1f11"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `${rFontSize}px serif`;
+        ctx.fillText(obj.glyph || "𓂀", obj.x + obj.w / 2, obj.y + obj.h / 2);
+        const letter = playerGlyphMap[obj.glyph];
         if (letter) {
-          ctx.font = `${fontSize * 0.45}px monospace`;
+          ctx.font = `${rFontSize * 0.5}px monospace`;
           ctx.fillStyle = "#d6c48a";
-          ctx.fillText(letter, x, y + fontSize * 0.65);
-          ctx.font = `${fontSize}px serif`;
-          ctx.fillStyle = "#2a1f11";
+          ctx.fillText(letter, obj.x + obj.w / 2, obj.y + obj.h + 8);
         }
+        break;
       }
-    }
 
-    else if (obj.type === "door") {
-      let offset = 0;
-      if (!obj.locked && obj.openProgress > 0) {
-        if (obj.direction === "right") offset =  obj.openProgress * obj.w;
-        if (obj.direction === "left")  offset = -obj.openProgress * obj.w;
-        if (obj.direction === "down")  offset =  obj.openProgress * obj.h;
-        if (obj.direction === "up")    offset = -obj.openProgress * obj.h;
+      case "glyph": {
+        ctx.fillStyle = obj.color;
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        ctx.strokeStyle = "#3e2f1f"; ctx.lineWidth = 2;
+        ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+        const glyphs   = obj.glyphText || [];
+        const count    = glyphs.length || 1;
+        const gPadding = 6;
+        const spacing  = (obj.w - gPadding * 2) / count;
+        const gFont    = Math.min(obj.h * 0.6, spacing * 0.9);
+        ctx.fillStyle = "#2a1f11"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `${gFont}px serif`;
+        for (let i = 0; i < count; i++) {
+          const g = glyphs[i];
+          const gx = obj.x + gPadding + spacing * (i + 0.5);
+          const gy = obj.y + obj.h / 2;
+          ctx.fillText(g, gx, gy);
+          const gl = playerGlyphMap[g];
+          if (gl) {
+            ctx.font = `${gFont * 0.45}px monospace`; ctx.fillStyle = "#d6c48a";
+            ctx.fillText(gl, gx, gy + gFont * 0.65);
+            ctx.font = `${gFont}px serif`;             ctx.fillStyle = "#2a1f11";
+          }
+        }
+        break;
       }
-      const x = obj.x + (["left","right"].includes(obj.direction) ? offset : 0);
-      const y = obj.y + (["up","down"].includes(obj.direction)    ? offset : 0);
 
-      ctx.fillStyle = obj.locked ? "#4f3925" : "#7a6a4f";
-      ctx.fillRect(x, y, obj.w, obj.h);
-    }
+      case "door": {
+        let offset = 0;
+        if (!obj.locked && obj.openProgress > 0) {
+          if (obj.direction === "right") offset =  obj.openProgress * obj.w;
+          if (obj.direction === "left")  offset = -obj.openProgress * obj.w;
+          if (obj.direction === "down")  offset =  obj.openProgress * obj.h;
+          if (obj.direction === "up")    offset = -obj.openProgress * obj.h;
+        }
+        const dx = ["left","right"].includes(obj.direction) ? offset : 0;
+        const dy = ["up","down"].includes(obj.direction)    ? offset : 0;
+        ctx.fillStyle = obj.locked ? "#4f3925" : "#7a6a4f";
+        ctx.fillRect(obj.x + dx, obj.y + dy, obj.w, obj.h);
+        break;
+      }
 
-    else if (obj.type === "torch" && !obj.pickedUp) {
-      ctx.fillStyle = "#c9a24a";
-      ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+      case "torch": {
+        ctx.fillStyle = "#c9a24a";
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        ctx.fillStyle = "#ffb84d";
+        ctx.beginPath();
+        ctx.moveTo(obj.x + obj.w / 2, obj.y - 6);
+        ctx.lineTo(obj.x + obj.w + 2, obj.y + 4);
+        ctx.lineTo(obj.x - 2, obj.y + 4);
+        ctx.closePath(); ctx.fill();
+        break;
+      }
 
-      ctx.fillStyle = "#ffb84d";
-      ctx.beginPath();
-      ctx.moveTo(obj.x + obj.w / 2, obj.y - 6);
-      ctx.lineTo(obj.x + obj.w + 2, obj.y + 4);
-      ctx.lineTo(obj.x - 2, obj.y + 4);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    else if (obj.type !== "door" && obj.type !== "torch") {
-      ctx.fillStyle = highlight;
-      ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+      default: {
+        // altar, tablet, scroll, amulet, decoration, etc.
+        ctx.fillStyle = highlight;
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        break;
+      }
     }
 
     ctx.restore();
@@ -473,22 +444,18 @@ function drawObjects() {
 // DRAW — PLAYER
 // =====================
 function drawPlayer() {
-  const x = player.x;
-  const y = player.y;
-
   ctx.fillStyle = "#f4f0de";
   ctx.beginPath();
-  ctx.arc(x, y, 10, 0, Math.PI * 2);
+  ctx.arc(player.x, player.y, 10, 0, Math.PI * 2);
   ctx.fill();
 
   if (player.heldItem?.type === "torch") {
     ctx.fillStyle = "#c9a24a";
-    ctx.fillRect(x + 10, y - 4, 6, 12);
-
+    ctx.fillRect(player.x + 10, player.y - 4, 6, 12);
     if (player.lampOn) {
       ctx.fillStyle = "#ffc76c";
       ctx.beginPath();
-      ctx.arc(x + 13, y - 10, 8, 0, Math.PI * 2);
+      ctx.arc(player.x + 13, player.y - 10, 8, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -499,24 +466,21 @@ function drawPlayer() {
 // =====================
 function drawLighting() {
   const baseRadius = player.lampOn ? 200 : 60;
-  const pulse  = 1 + Math.sin(gameTime * 2.5) * 0.12;
-  const radius = baseRadius * pulse;
-  const ambient = player.lampOn ? 0.55 : 0.65;
+  const pulse      = 1 + Math.sin(gameTime * 2.5) * 0.12;
+  const radius     = baseRadius * pulse;
+  const ambient    = player.lampOn ? 0.55 : 0.65;
 
   ctx.save();
 
   ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = `rgba(0, 0, 0, ${ambient})`;
+  ctx.fillStyle = `rgba(0,0,0,${ambient})`;
   ctx.fillRect(0, 0, world.width, world.height);
 
   ctx.globalCompositeOperation = "lighter";
-  const light = ctx.createRadialGradient(
-    player.x, player.y, radius * 0.1,
-    player.x, player.y, radius
-  );
-  light.addColorStop(0,   "rgba(255, 240, 200, 0.25)");
-  light.addColorStop(0.5, "rgba(255, 210, 140, 0.10)");
-  light.addColorStop(1,   "rgba(0, 0, 0, 0)");
+  const light = ctx.createRadialGradient(player.x, player.y, radius * 0.1, player.x, player.y, radius);
+  light.addColorStop(0,   "rgba(255,240,200,0.25)");
+  light.addColorStop(0.5, "rgba(255,210,140,0.10)");
+  light.addColorStop(1,   "rgba(0,0,0,0)");
 
   ctx.fillStyle = light;
   ctx.beginPath();
@@ -550,7 +514,6 @@ function loop() {
   drawLighting();
 
   checkDoorTransition();
-
   if (mapVisible) renderMap();
 
   requestAnimationFrame(loop);

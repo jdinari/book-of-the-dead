@@ -51,6 +51,7 @@ function showInspectUI(obj) {
       ? "It remains sealed. The glyphs and the light should reveal the way."
       : "The door is open. Step through to continue.");
   } else {
+    // covers decoration, altar, tablet, scroll, amulet, etc.
     lines.push(obj.text || "You inspect the object and sense ancient purpose.");
   }
 
@@ -128,59 +129,55 @@ function toggleNotebook() {
 // =====================
 function renderMap() {
   const padding = 40;
-  const size = 120;
+  const size    = 120;
 
-  const panel = mapPanel.getBoundingClientRect();
+  const panel   = mapPanel.getBoundingClientRect();
   const current = MAP_LAYOUT[currentRoom.id];
+  if (!current) return;
 
-  const centerX = panel.width / 2;
+  const centerX = panel.width  / 2;
   const centerY = panel.height / 2;
 
-  const currentRoomX = current.x * size + padding + size / 2;
-  const currentRoomY = current.y * size + padding + size / 2;
-
-  const offsetX = centerX - currentRoomX;
-  const offsetY = centerY - currentRoomY;
+  const offsetX = centerX - (current.x * size + padding + size / 2);
+  const offsetY = centerY - (current.y * size + padding + size / 2);
 
   let html = `<div class="map-canvas" style="position:relative;">`;
 
+  // rooms
   for (const room of rooms) {
     const pos = MAP_LAYOUT[room.id];
     if (!pos) continue;
 
-    const x = pos.x * size + padding + offsetX;
-    const y = pos.y * size + padding + offsetY;
+    const x         = pos.x * size + padding + offsetX;
+    const y         = pos.y * size + padding + offsetY;
     const isCurrent = room.id === currentRoom.id;
 
     html += `
       <div class="map-room-node ${isCurrent ? "current" : ""}"
            style="
-             position:absolute;
-             left:${x}px; top:${y}px;
+             position:absolute; left:${x}px; top:${y}px;
              width:${size}px; height:${size}px;
              background:${isCurrent ? "#c9a24a" : "#3a352d"};
-             border:2px solid #222;
-             box-sizing:border-box;
+             border:2px solid #222; box-sizing:border-box;
              display:flex; align-items:center; justify-content:center;
-             color:#fff; font-size:12px; text-align:center;
+             color:#fff; font-size:11px; text-align:center; padding:4px;
            ">
         ${room.name}
       </div>
     `;
   }
 
+  // player dot
   const p = MAP_LAYOUT[currentRoom.id];
   if (p) {
     html += `
       <div style="
         position:absolute;
         left:${p.x * size + padding + size / 2 + offsetX}px;
-        top:${p.y * size + padding + size / 2 + offsetY}px;
-        transform:translate(-50%, -50%);
-        width:10px; height:10px;
-        border-radius:50%;
-        background:red;
-        box-shadow:0 0 10px red;
+        top:${p.y  * size + padding + size / 2 + offsetY}px;
+        transform:translate(-50%,-50%);
+        width:10px; height:10px; border-radius:50%;
+        background:red; box-shadow:0 0 10px red;
       "></div>
     `;
   }
@@ -205,8 +202,8 @@ function toggleMap() {
 // HUD VISIBILITY
 // =====================
 function setHUDVisible(visible) {
-  document.getElementById("quest-panel").style.display  = visible ? "block" : "none";
-  document.getElementById("inventory-grid").style.display = visible ? "grid" : "none";
+  document.getElementById("quest-panel").style.display    = visible ? "block" : "none";
+  document.getElementById("inventory-grid").style.display = visible ? "grid"  : "none";
 
   if (!visible) {
     mapPanel.classList.add("hidden");
@@ -218,7 +215,7 @@ function setHUDVisible(visible) {
 // HELP TEXT
 // =====================
 function updateHelpText() {
-  let help = `Controls: W/A/S/D or arrows to move · E to inspect · X to pick up/drop · Q to cycle held item · L to light torch`;
+  let help = "Controls: W/A/S/D or arrows to move · E to inspect · X to pick up/drop · Q to cycle held item · L to light torch";
   if (mapUnlocked) help += " · M to toggle map";
   if (nearObject?.type === "glyph" && hasFullTranslation()) {
     help += " · G to decode glyphs";

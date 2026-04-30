@@ -1,6 +1,6 @@
 // =====================
 // INVENTORY.JS
-// Pick up, drop, cycle, remove inventory items.
+// Pick up, drop, cycle, and remove inventory items.
 // Depends on: state.js, rooms.js, ui.js, objectives.js
 // =====================
 
@@ -28,7 +28,6 @@ function addToInventory(obj) {
     Object.assign(playerGlyphMap, { [obj.glyph]: obj.letter });
     glyphKnowledge[obj.glyph] = obj.letter;
     ui.textContent = `Decoded fragment: ${obj.glyph} → ${obj.letter}`;
-
     if (hasFullTranslation()) {
       markObjective("collect-rosetta");
     }
@@ -74,34 +73,23 @@ function cycleInventory(direction) {
 
 function removeItemFromInventory(type) {
   for (let i = inventory.length - 1; i >= 0; i--) {
-    if (inventory[i].type === type) {
-      inventory.splice(i, 1);
-    }
+    if (inventory[i].type === type) inventory.splice(i, 1);
   }
-
-  if (player.heldItem?.type === type) {
-    player.heldItem = null;
-  }
-
+  if (player.heldItem?.type === type) player.heldItem = null;
   player.inventoryIndex = Math.max(0, player.inventoryIndex - 1);
   updateUI();
 }
 
 function consumeRosettaPieces() {
+  // remove from room
   const objs = currentRoom.objects;
-
   for (let i = objs.length - 1; i >= 0; i--) {
-    if (objs[i].type === "rosetta" && objs[i].pickedUp) {
-      objs.splice(i, 1);
-    }
+    if (objs[i].type === "rosetta" && objs[i].pickedUp) objs.splice(i, 1);
   }
-
+  // remove from inventory
   for (let i = inventory.length - 1; i >= 0; i--) {
-    if (inventory[i].type === "rosetta") {
-      inventory.splice(i, 1);
-    }
+    if (inventory[i].type === "rosetta") inventory.splice(i, 1);
   }
-
   player.heldItem = inventory[player.inventoryIndex] || null;
   updateUI();
 }

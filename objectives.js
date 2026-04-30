@@ -1,6 +1,6 @@
 // =====================
 // OBJECTIVES.JS
-// Objective tracking, inspect logic, door unlocking,
+// Objective tracking, inspect dispatch, door unlock logic,
 // glyph decoding, altar interactions.
 // Depends on: state.js, rooms.js, ui.js, inventory.js
 // =====================
@@ -11,8 +11,11 @@
 function markObjective(id) {
   gameState.completedObjectives[id] = true;
 
-  const objective = currentRoom.objectives.find(o => o.id === id);
-  if (objective) objective.done = true;
+  // mark in whichever room owns this objective
+  for (const room of rooms) {
+    const obj = room.objectives.find(o => o.id === id);
+    if (obj) { obj.done = true; break; }
+  }
 
   updateUI();
 }
@@ -20,9 +23,7 @@ function markObjective(id) {
 function syncObjectivesFromGameState() {
   for (const room of rooms) {
     for (const obj of room.objectives) {
-      if (gameState.completedObjectives[obj.id]) {
-        obj.done = true;
-      }
+      if (gameState.completedObjectives[obj.id]) obj.done = true;
     }
   }
 }
@@ -45,7 +46,6 @@ function decodeGlyphs(obj) {
     ui.textContent = "You have not fully deciphered the glyphs yet.";
     return;
   }
-
   if (glyphDecoded) {
     ui.textContent = "You already decoded the word: LIGHT.";
     return;
@@ -68,7 +68,6 @@ function checkGlyphSolution(obj) {
   for (const g of Object.keys(GLYPH_SOLUTION)) {
     if ((playerGlyphMap[g] || "") !== GLYPH_SOLUTION[g]) return;
   }
-
   glyphDecoded = true;
   markObjective("decode-glyphs");
   ui.textContent = "The glyphs resolve: LIGHT AND TRUTH OPEN THE EASTERN PASSAGE.";
@@ -80,10 +79,8 @@ function checkGlyphSolution(obj) {
 function attemptDoorUnlock(door) {
   if (!door) return;
 
-  if (door.direction === "right") {
-    const allDone = currentRoom.objectives.every(
-      o => gameState.completedObjectives[o.id]
-    );
+  if (door.direction === "right" && currentRoom.id === "burial-chamber") {
+    const allDone = currentRoom.objectives.every(o => gameState.completedObjectives[o.id]);
     if (allDone) {
       door.locked = false;
       door.opening = true;
@@ -96,15 +93,13 @@ function attemptDoorUnlock(door) {
     return;
   }
 
-  if (door.direction === "down") {
-    const secondRoom = rooms.find(r => r.id === "right-room");
-    const secondComplete = secondRoom.objectives.every(
-      o => gameState.completedObjectives[o.id]
-    );
+  if (door.direction === "down" && currentRoom.id === "burial-chamber") {
+    const secondRoom    = rooms.find(r => r.id === "right-room");
+    const secondComplete = secondRoom.objectives.every(o => gameState.completedObjectives[o.id]);
     if (secondComplete) {
       door.locked = false;
       door.opening = true;
-      ui.textContent = "The southern passage loosens its seal. You may return here when ready.";
+      ui.textContent = "The southern passage loosens its seal.";
       updateUI();
       return;
     }
@@ -112,6 +107,7 @@ function attemptDoorUnlock(door) {
     return;
   }
 
+  // all other doors: just report state
   ui.textContent = door.locked ? "The door is sealed." : "The door stands open.";
 }
 
@@ -124,16 +120,15 @@ function inspectObject(obj) {
 
   showInspectUI(obj);
 
+  // --- ushabti ---
   if (obj.type === "ushabti" && !obj.inspectDone) {
     obj.inspectDone = true;
     markObjective("speak-ushabti");
   }
 
+  // --- glyph stone ---
   if (obj.type === "glyph") {
-    const partial = obj.glyphText
-      .map(g => playerGlyphMap[g] || "?")
-      .join("");
-
+    const partial = obj.glyphText.map(g => playerGlyphMap[g] || "?").join("");
     if (glyphDecoded) {
       ui.textContent = "The glyphs resolve clearly: LIGHT.";
     } else {
@@ -144,46 +139,45 @@ function inspectObject(obj) {
     }
   }
 
+  // --- scroll ---
   if (obj.type === "scroll" && !obj.inspectDone) {
     obj.inspectDone = true;
     markObjective("find-scroll");
     ui.textContent = "An old scroll. It explains how to interpret the tablet.";
   }
 
+  // --- tablet ---
   if (obj.type === "tablet" && !obj.inspectDone) {
     const scroll = inventory.find(i => i.type === "scroll");
-
     if (!scroll) {
       ui.textContent = "You cannot understand the tablet without first finding the scroll.";
       return;
     }
-
     obj.inspectDone = true;
     const objState = currentRoom.objectives.find(o => o.id === "read-tablet");
-    if (objState && !objState.done) {
-      markObjective("read-tablet");
-    }
+    if (objState && !objState.done) markObjective("read-tablet");
 
     removeItemFromInventory("scroll");
 
     notebookOpen = false;
     glyphPanel.classList.add("hidden");
     glyphNotebookUnlocked = true;
-
     ui.textContent = "You can now study the glyph notebook (V).";
   }
 
+  // --- door ---
   if (obj.type === "door") {
     attemptDoorUnlock(obj);
   }
 
+  // --- amulet (on ground) ---
   if (obj.type === "amulet" && !obj.pickedUp) {
     markObjective("find-amulet");
   }
 
+  // --- altar ---
   if (obj.type === "altar" && currentRoom.id === "bottom-room") {
     const amulet = inventory.find(item => item.type === "amulet");
-
     if (amulet) {
       inventory.splice(inventory.indexOf(amulet), 1);
       player.heldItem = null;
@@ -192,6 +186,14 @@ function inspectObject(obj) {
       updateUI();
     } else {
       ui.textContent = "The altar demands an offering to open the next path.";
+    }
+  }
+
+  // --- decoration: mark room-explore objective on first inspect ---
+  if (obj.type === "decoration") {
+    const exploreId = `${currentRoom.id}-explore`;
+    if (!gameState.completedObjectives[exploreId]) {
+      markObjective(exploreId);
     }
   }
 }

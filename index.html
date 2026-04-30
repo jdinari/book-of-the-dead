@@ -9,6 +9,7 @@
 <body>
 
 <canvas id="game"></canvas>
+
 <div id="quest-panel">
   <div id="room-title"></div>
   <div id="objective-text"></div>
@@ -28,13 +29,23 @@
   <div class="slot" data-index="5"></div>
 </div>
 
-<div id="help-text">Controls: W/A/S/D or arrows to move · E to inspect · X to pick up/drop · Q to cycle held item · L to light torch.</div>
+<div id="help-text"></div>
 
-<script src="state.js" defer></script>
-<script src="rooms.js" defer></script>
-<script src="ui.js" defer></script>
-<script src="inventory.js" defer></script>
-<script src="objectives.js" defer></script>
-<script src="engine.js" defer></script>
+<!--
+  Load order matters:
+  1. state.js    — shared variables, canvas, flags
+  2. rooms.js    — room data + helpers (needs state)
+  3. ui.js       — display functions (needs state + rooms)
+  4. inventory.js — item management (needs state + ui)
+  5. objectives.js — quest logic (needs all above)
+  6. engine.js   — game loop, input, drawing (needs everything)
+-->
+<script src="state.js"></script>
+<script src="rooms.js"></script>
+<script src="ui.js"></script>
+<script src="inventory.js"></script>
+<script src="objectives.js"></script>
+<script src="engine.js"></script>
+
 </body>
 </html>

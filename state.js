@@ -21,37 +21,24 @@ window.addEventListener("resize", () => {
 // =====================
 // UI ELEMENT REFS
 // =====================
-const ui = document.getElementById("ui");
-const roomTitle = document.getElementById("room-title");
-const objectiveText = document.getElementById("objective-text");
-const helpText = document.getElementById("help-text");
-const mapPanel = document.getElementById("map-panel");
+const ui             = document.getElementById("ui");
+const roomTitle      = document.getElementById("room-title");
+const objectiveText  = document.getElementById("objective-text");
+const helpText       = document.getElementById("help-text");
+const mapPanel       = document.getElementById("map-panel");
 const inventorySlots = Array.from(document.querySelectorAll("#inventory-grid .slot"));
-const glyphPanel = document.getElementById("glyph-panel");
+const glyphPanel     = document.getElementById("glyph-panel");
 
 // =====================
 // WORLD + CAMERA
 // =====================
-const world = {
-  width: 800,
-  height: 500
-};
+const world = { width: 800, height: 500 };
 
-const camera = {
-  x: 0,
-  y: 0
-};
+const camera = { x: 0, y: 0 };
 
-const cameraState = {
-  zoom: 1,
-  targetZoom: 1
-};
+const cameraState = { zoom: 1, targetZoom: 1 };
 
-const inspectState = {
-  active: false,
-  focus: null,
-  zoom: 12
-};
+const inspectState = { active: false, focus: null, zoom: 12 };
 
 // =====================
 // PLAYER
@@ -97,13 +84,13 @@ const gameState = {
   completedObjectives: {}
 };
 
-let mapUnlocked = true;
-let mapVisible = false;
-let glyphDecoded = false;
-let notebookOpen = false;
+let mapUnlocked           = true;
+let mapVisible            = false;
+let glyphDecoded          = false;
+let notebookOpen          = false;
 let glyphNotebookUnlocked = false;
-let glyphPanelOpen = false;
-let gameTime = 0;
+let glyphPanelOpen        = false;
+let gameTime              = 0;
 
 // =====================
 // INPUT
@@ -112,16 +99,26 @@ const keys = {};
 
 // =====================
 // ROOM TRACKING
+// currentRoom is assigned in rooms.js after the rooms array is defined.
 // =====================
-// currentRoom is set in rooms.js after rooms array is defined
 let currentRoom = null;
-let nearObject = null;
+let nearObject  = null;
 
 // =====================
 // MAP LAYOUT
+// Grid coordinates: x = column (negative = west),
+//                   y = row    (negative = north).
 // =====================
 const MAP_LAYOUT = {
-  "burial-chamber": { x: 0, y: 0 },
-  "right-room":     { x: 1, y: 0 },
-  "bottom-room":    { x: 0, y: 1 }
+  // original rooms
+  "burial-chamber":  { x:  0, y:  0 },
+  "right-room":      { x:  1, y:  0 },
+  "bottom-room":     { x:  0, y:  1 },
+
+  // new rooms
+  "west-hall":       { x: -1, y:  0 },  // west  of burial-chamber
+  "north-vestibule": { x:  0, y: -1 },  // north of burial-chamber
+  "east-gallery":    { x:  1, y:  1 },  // east  of bottom-room
+  "deep-corridor":   { x:  2, y:  0 },  // east  of right-room
+  "ossuary":         { x:  0, y:  2 },  // south of bottom-room
 };
