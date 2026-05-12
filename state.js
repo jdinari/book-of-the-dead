@@ -93,6 +93,27 @@ let glyphPanelOpen        = false;
 let gameTime              = 0;
 
 // =====================
+// PUZZLE STATE
+// =====================
+
+// West Hall — canopic ritual order tracking
+const canopicSequence     = [];        // grows as player inspects jars in order
+const CANOPIC_ORDER       = [1,2,3,4]; // Imsety → Hapy → Duamutef → Qebehsenuef
+
+// North Vestibule — which offering bowls have been filled
+const offeringsFilled     = { bread: false, oil: false, incense: false };
+
+// East Gallery — name fragments collected from intact cartouches
+const galleryNameFragments = [];       // up to 2 strings pushed as cartouches inspected
+
+// Deep Corridor — whether the torch has been mounted in the bracket
+let corridorTorchMounted  = false;
+
+// Ossuary — how many watcher skulls have been inspected
+let watcherSkullsRead     = 0;
+const WATCHER_SKULL_COUNT = 4;
+
+// =====================
 // INPUT
 // =====================
 const keys = {};

@@ -240,6 +240,12 @@ const rooms = [
 
   // ------------------------------------------------------------------ //
   //  WEST HALL  (west-hall, -1,0) — west of burial-chamber
+  //
+  //  PUZZLE: Canopic Jar Ritual Order
+  //  The wall inscription gives the ritual order of the four sons of Horus:
+  //    Imsety (human)  → Hapy (baboon) → Duamutef (jackal) → Qebehsenuef (falcon)
+  //  Inspecting the four canopic jars in that order opens a hidden niche
+  //  containing a Key Fragment used later in the deep corridor.
   // ------------------------------------------------------------------ //
   {
     id:   "west-hall",
@@ -248,35 +254,99 @@ const rooms = [
     description: "A wide hall where priests once readied the dead for their journey. Stone basins line the walls, long dry.",
 
     objectives: [
-      { id: "west-hall-explore", name: "Explore Hall", type: "objective", roomId: "west-hall", label: "Explore the Hall of Preparation.", done: false }
+      { id: "canopic-ritual",  label: "Perform the ritual of the four sons of Horus.",   done: false },
+      { id: "west-hall-niche", label: "Retrieve the key fragment from the hidden niche.", done: false }
     ],
 
     objects: [
       createDoor({
         id: "door-west-right", name: "East Door",
         x: 760, y: 200,
-        color: "#4f3925", locked: false, openProgress: 1,   // burial chamber is freely accessible from here
+        color: "#4f3925", locked: false, openProgress: 1,
         direction: "right", leadsTo: "burial-chamber", pairId: "burial-west",
         text: "The passage back east to the Burial Chamber."
       }),
-      // placeholder decoration
+
+      // ── clue inscription ──────────────────────────────────────────
+      {
+        id: "obj-ritual-inscription", name: "Ritual Inscription", type: "decoration",
+        x: 580, y: 100, w: 100, h: 130,
+        color: "#5c5040",
+        text: "A painted list of priestly instructions:\n\n" +
+              "\"First, Imsety the human-headed, guardian of the liver.\n" +
+              " Then Hapy the baboon, guardian of the lungs.\n" +
+              " Then Duamutef the jackal, guardian of the stomach.\n" +
+              " Last, Qebehsenuef the falcon, guardian of the intestines.\n\n" +
+              "Touch each in order and the passage of organs shall open.\""
+      },
+
+      // ── stone basins (decoration only) ────────────────────────────
       {
         id: "obj-basin-1", name: "Stone Basin", type: "decoration",
-        x: 80, y: 160, w: 40, h: 24,
+        x: 80, y: 140, w: 44, h: 26,
         color: "#4a4237",
-        text: "A wide basin carved from granite. Whatever it held has long since evaporated."
+        text: "A wide basin carved from granite. A faint residue of natron lines the inside — used to dry the body for preservation."
       },
       {
         id: "obj-basin-2", name: "Stone Basin", type: "decoration",
-        x: 80, y: 300, w: 40, h: 24,
+        x: 80, y: 330, w: 44, h: 26,
         color: "#4a4237",
-        text: "A second basin, identical to the first. A faint residue of natron lines the inside."
+        text: "A second basin, stained a pale white. The linen wrappings that soaked here are long gone."
+      },
+
+      // ── four canopic jars ─────────────────────────────────────────
+      // order index: Imsety=1, Hapy=2, Duamutef=3, Qebehsenuef=4
+      {
+        id: "canopic-imsety", name: "Canopic Jar — Imsety", type: "canopic",
+        x: 200, y: 200, w: 24, h: 32,
+        color: "#8a7055",
+        ritualIndex: 1,
+        head: "human",
+        text: "A alabaster jar with a human-headed stopper. Imsety, son of Horus, guardian of the liver. The first in the rite.",
+        inspectDone: false
       },
       {
-        id: "obj-wall-inscription", name: "Wall Inscription", type: "decoration",
-        x: 600, y: 140, w: 60, h: 80,
-        color: "#5c5040",
-        text: "Painted hieroglyphs list the names of the dead. Hundreds of them."
+        id: "canopic-hapy", name: "Canopic Jar — Hapy", type: "canopic",
+        x: 280, y: 200, w: 24, h: 32,
+        color: "#8a7055",
+        ritualIndex: 2,
+        head: "baboon",
+        text: "A alabaster jar with a baboon-headed stopper. Hapy, son of Horus, guardian of the lungs. The second in the rite.",
+        inspectDone: false
+      },
+      {
+        id: "canopic-duamutef", name: "Canopic Jar — Duamutef", type: "canopic",
+        x: 360, y: 200, w: 24, h: 32,
+        color: "#8a7055",
+        ritualIndex: 3,
+        head: "jackal",
+        text: "A alabaster jar with a jackal-headed stopper. Duamutef, son of Horus, guardian of the stomach. The third in the rite.",
+        inspectDone: false
+      },
+      {
+        id: "canopic-qebehsenuef", name: "Canopic Jar — Qebehsenuef", type: "canopic",
+        x: 440, y: 200, w: 24, h: 32,
+        color: "#8a7055",
+        ritualIndex: 4,
+        head: "falcon",
+        text: "A alabaster jar with a falcon-headed stopper. Qebehsenuef, son of Horus, guardian of the intestines. The fourth and last in the rite.",
+        inspectDone: false
+      },
+
+      // ── hidden niche (revealed after ritual) ──────────────────────
+      {
+        id: "obj-west-niche", name: "Hidden Niche", type: "niche",
+        x: 580, y: 300, w: 50, h: 50,
+        color: "#2a2218",
+        hidden: true,       // drawn as plain wall until canopic-ritual completes
+        text: "A hollow in the wall, revealed by the ritual. Inside rests a small iron key fragment.",
+        containsItem: {
+          id: "key-fragment-west", name: "Key Fragment", type: "key-fragment",
+          x: 600, y: 320, w: 14, h: 10,
+          color: "#888070",
+          pickedUp: false,
+          text: "A fragment of an iron key. One piece of several needed to open something deeper in the tomb."
+        }
       }
     ],
     exit: null
@@ -284,49 +354,96 @@ const rooms = [
 
   // ------------------------------------------------------------------ //
   //  NORTH VESTIBULE  (north-vestibule, 0,-1) — north of burial-chamber
+  //
+  //  PUZZLE: Three Offerings
+  //  Three offering bowls (food, oil, incense) must each be "filled" by
+  //  inspecting the bowl while holding the matching item in inventory.
+  //  The items are hidden across the tomb:
+  //    - dried bread  → found on the cedar chest in this room
+  //    - oil flask    → found in the west-hall basin (added below)
+  //    - incense cone → found in the ossuary canopic shelf
+  //  When all three bowls are filled a locked northern alcove door opens,
+  //  revealing a Canopic Seal needed to progress in the ossuary.
   // ------------------------------------------------------------------ //
   {
     id:   "north-vestibule",
     name: "Vestibule of Offerings",
     type: "room",
-    description: "A vaulted antechamber smelling of cedar resin. Rows of offering tables stand empty, waiting.",
+    description: "A vaulted antechamber smelling of cedar resin. Three offering tables stand before a sealed alcove.",
 
     objectives: [
-      { id: "north-vestibule-explore", name: "Explore Vestibule", type: "objective", roomId: "north-vestibule", label: "Explore the Vestibule of Offerings.", done: false }
+      { id: "fill-offering-bread",    label: "Place dried bread in the food bowl.",   done: false },
+      { id: "fill-offering-oil",     label: "Pour oil into the oil bowl.",            done: false },
+      { id: "fill-offering-incense", label: "Set incense in the incense bowl.",       done: false },
+      { id: "open-alcove",           label: "Open the sealed offering alcove.",       done: false }
     ],
 
     objects: [
       createDoor({
         id: "door-north-down", name: "South Door",
         x: 360, y: 468, w: 80, h: 30,
-        color: "#4f3925", locked: false, openProgress: 1,   // burial chamber is freely accessible from here
+        color: "#4f3925", locked: false, openProgress: 1,
         direction: "down", leadsTo: "burial-chamber", pairId: "burial-north",
         text: "The passage back south to the Burial Chamber."
       }),
-      // placeholder decorations
+
+      // ── sealed alcove door (unlocks when all three offerings placed) ──
+      createDoor({
+        id: "door-alcove-north", name: "Alcove Door",
+        x: 360, y: 0, w: 80, h: 30,
+        color: "#5a3a20", locked: true,
+        direction: "up", leadsTo: "north-vestibule", pairId: "alcove-fake",
+        text: "A sealed stone alcove. The inscription above reads: 'Feed the three needs of the dead: sustenance, light, and fragrance.'"
+      }),
+
+      // ── clue: false door inscription ──────────────────────────────
       {
-        id: "obj-offering-table-1", name: "Offering Table", type: "decoration",
-        x: 150, y: 180, w: 60, h: 20,
-        color: "#5a4a30",
-        text: "A low stone table. It once held bread, beer, and linen for the journey ahead."
+        id: "obj-false-door", name: "False Door", type: "decoration",
+        x: 320, y: 60, w: 160, h: 80,
+        color: "#3e3428",
+        text: "A painted false door — the passage between the living and the dead. An inscription frames the three bowls below it:\n\n'Bread for the body. Oil for the flame. Smoke for the gods. Bring each and the alcove shall open.'"
+      },
+
+      // ── three offering bowls ──────────────────────────────────────
+      {
+        id: "bowl-food", name: "Food Bowl", type: "offering-bowl",
+        x: 160, y: 200, w: 50, h: 20,
+        color: "#6a5535",
+        offeringType: "bread",
+        filled: false,
+        text: "An empty clay bowl carved with loaves of bread. It waits for sustenance."
       },
       {
-        id: "obj-offering-table-2", name: "Offering Table", type: "decoration",
-        x: 350, y: 180, w: 60, h: 20,
-        color: "#5a4a30",
-        text: "A second offering table, toppled on one side. Something disturbed this room long ago."
+        id: "bowl-oil", name: "Oil Bowl", type: "offering-bowl",
+        x: 375, y: 200, w: 50, h: 20,
+        color: "#6a5535",
+        offeringType: "oil",
+        filled: false,
+        text: "A stone bowl with a lamp-wick groove. It waits for oil."
       },
       {
-        id: "obj-offering-table-3", name: "Offering Table", type: "decoration",
-        x: 560, y: 180, w: 60, h: 20,
-        color: "#5a4a30",
-        text: "A third table, still upright. A clay bowl sits on it, empty."
+        id: "bowl-incense", name: "Incense Bowl", type: "offering-bowl",
+        x: 590, y: 200, w: 50, h: 20,
+        color: "#6a5535",
+        offeringType: "incense",
+        filled: false,
+        text: "A shallow bowl blackened by centuries of old smoke. It waits for incense."
       },
+
+      // ── cedar chest with dried bread ──────────────────────────────
       {
         id: "obj-cedar-chest", name: "Cedar Chest", type: "decoration",
-        x: 340, y: 310, w: 50, h: 36,
+        x: 340, y: 340, w: 50, h: 36,
         color: "#6b3f1e",
-        text: "A small chest of Lebanese cedar. The lid is sealed with a dried resin that crumbles at your touch — but there is nothing inside."
+        text: "A small chest of Lebanese cedar. Inside, surprisingly preserved, a round of dried funerary bread."
+      },
+      {
+        id: "item-bread", name: "Dried Bread", type: "offering-item",
+        x: 355, y: 348, w: 14, h: 12,
+        color: "#c8a870",
+        offeringType: "bread",
+        pickedUp: false,
+        text: "A round of hardened funerary bread. Still faintly fragrant after centuries. Place it in the food bowl."
       }
     ],
     exit: null
@@ -334,6 +451,13 @@ const rooms = [
 
   // ------------------------------------------------------------------ //
   //  EAST GALLERY  (east-gallery, 1,1) — east of bottom-room
+  //
+  //  PUZZLE: The Erased Cartouche
+  //  Cartouche-1 and Cartouche-3 each contain a name-fragment clue
+  //  (one gives the first syllable, the other the second). Inspecting
+  //  both in any order loads nameFragments[]. When both are known,
+  //  inspecting the erased cartouche (obj-cartouche-2) "restores" it,
+  //  marks the objective, and spawns a secret compartment with an item.
   // ------------------------------------------------------------------ //
   {
     id:   "east-gallery",
@@ -342,41 +466,73 @@ const rooms = [
     description: "A long gallery lined with royal cartouches carved in relief. The air here is strangely warm.",
 
     objectives: [
-      { id: "east-gallery-explore", name: "Explore Gallery", type: "objective", roomId: "east-gallery", label: "Explore the Gallery of Kings.", done: false }
+      { id: "read-cartouche-clues",  label: "Study the intact cartouches for clues.",      done: false },
+      { id: "restore-cartouche",     label: "Restore the erased cartouche's name.",         done: false },
+      { id: "gallery-compartment",   label: "Retrieve the item from the secret compartment.", done: false }
     ],
 
     objects: [
       createDoor({
         id: "door-egallery-left", name: "West Door",
         x: 0, y: 200,
-        color: "#4f3925", locked: false, openProgress: 1,   // burial chamber is freely accessible from here
+        color: "#4f3925", locked: false, openProgress: 1,
         direction: "left", leadsTo: "bottom-room", pairId: "bottom-east",
         text: "The passage back west to the Sepulcher Depths."
       }),
-      // placeholder decorations
+
+      // ── cartouche 1: gives syllable "AKHEN" ──────────────────────
       {
-        id: "obj-cartouche-1", name: "Royal Cartouche", type: "decoration",
-        x: 100, y: 100, w: 36, h: 60,
+        id: "obj-cartouche-1", name: "Royal Cartouche — Amenhotep", type: "cartouche",
+        x: 100, y: 80, w: 36, h: 70,
         color: "#7a6540",
-        text: "A cartouche bearing a pharaoh's name. The hieroglyphs within read: Amenhotep, Beloved of Amun."
+        nameFragment: "AKHEN",
+        fragmentSlot: 0,
+        inspectDone: false,
+        text: "A cartouche bearing the name Amenhotep, Beloved of Amun. Beneath the main inscription, almost too small to see, a mason has scratched a syllable: AKHEN — as if recording a secret name alongside the official one."
       },
+
+      // ── cartouche 2: erased ───────────────────────────────────────
       {
-        id: "obj-cartouche-2", name: "Royal Cartouche", type: "decoration",
-        x: 300, y: 100, w: 36, h: 60,
-        color: "#7a6540",
-        text: "A second cartouche. This name is partially chiseled away — deliberately erased."
+        id: "obj-cartouche-2", name: "Erased Cartouche", type: "cartouche-erased",
+        x: 310, y: 80, w: 36, h: 70,
+        color: "#524535",
+        restored: false,
+        text: "A cartouche deliberately chiseled away — damnatio memoriae. The name has been erased from history. Fragments of the oval border remain, but the glyphs within are gone.\n\nIf you knew the name, perhaps you could speak it aloud and restore its memory."
       },
+
+      // ── cartouche 3: gives syllable "ATEN" ───────────────────────
       {
-        id: "obj-cartouche-3", name: "Royal Cartouche", type: "decoration",
-        x: 500, y: 100, w: 36, h: 60,
+        id: "obj-cartouche-3", name: "Royal Cartouche — Thutmose", type: "cartouche",
+        x: 530, y: 80, w: 36, h: 70,
         color: "#7a6540",
-        text: "A third cartouche. The name reads: Thutmose, Son of Ra."
+        nameFragment: "ATEN",
+        fragmentSlot: 1,
+        inspectDone: false,
+        text: "A cartouche reading: Thutmose, Son of Ra. In the lower margin, another scratched syllable: ATEN — the same careful hand as the first cartouche. Two halves of a hidden name."
       },
+
+      // ── floor mosaic: atmospheric decoration ─────────────────────
       {
         id: "obj-floor-mosaic", name: "Floor Mosaic", type: "decoration",
-        x: 260, y: 300, w: 200, h: 80,
+        x: 220, y: 310, w: 360, h: 80,
         color: "#3d3328",
-        text: "A mosaic of lapis lazuli and carnelian depicting the solar barque crossing the underworld sky."
+        text: "A mosaic of lapis lazuli and carnelian depicting the solar barque crossing the underworld sky. Ra stands at the prow, his head a disk of gold tesserae. The inscription below reads: 'He who is named shall sail. He who is unnamed shall drift.'"
+      },
+
+      // ── secret compartment (hidden, revealed after cartouche restored) ─
+      {
+        id: "obj-gallery-compartment", name: "Secret Compartment", type: "niche",
+        x: 310, y: 180, w: 36, h: 30,
+        color: "#2a2218",
+        hidden: true,
+        text: "A small compartment has opened in the wall beneath the restored cartouche. Inside: a sealed canopic ring — a priestly token of authority.",
+        containsItem: {
+          id: "item-canopic-ring", name: "Canopic Ring", type: "canopic-ring",
+          x: 318, y: 188, w: 14, h: 14,
+          color: "#c8a030",
+          pickedUp: false,
+          text: "A bronze ring bearing the seal of the four sons of Horus. Priestly authority, carried into the tomb."
+        }
       }
     ],
     exit: null
@@ -384,43 +540,82 @@ const rooms = [
 
   // ------------------------------------------------------------------ //
   //  DEEP CORRIDOR  (deep-corridor, 2,0) — east of right-room
+  //
+  //  PUZZLE: Mount the Torch
+  //  An empty torch bracket on the wall. If the player holds a lit torch
+  //  and presses T near the bracket, they mount it, permanently lighting
+  //  the room. The light reveals three faded wall paintings that were
+  //  invisible in darkness. The central painting contains a new glyph
+  //  clue — a cartouche name that hints at the erased pharaoh.
+  //  Mounting also unlocks the bracket as a waypoint (torch stays lit
+  //  even after the player leaves, tracked by corridorTorchMounted flag).
   // ------------------------------------------------------------------ //
   {
     id:   "deep-corridor",
     name: "Deep Corridor",
     type: "room",
-    description: "A long, narrow passage carved deeper into the bedrock. The ceiling is low and the walls press close. Torch smoke has blackened the stone.",
+    description: "A long, narrow passage carved deeper into the bedrock. The ceiling is low. Torch smoke has blackened the stone.",
 
     objectives: [
-      { id: "deep-corridor-explore", name: "Explore Corridor", type: "objective", roomId: "deep-corridor", label: "Explore the Deep Corridor.", done: false }
+      { id: "mount-corridor-torch", label: "Mount your torch in the wall bracket.",              done: false },
+      { id: "read-wall-paintings",  label: "Read the revealed paintings in the lit corridor.",   done: false }
     ],
 
     objects: [
       createDoor({
         id: "door-dcorridor-left", name: "West Door",
         x: 0, y: 200,
-        color: "#4f3925", locked: false, openProgress: 1,   // antechamber is freely accessible from here
+        color: "#4f3925", locked: false, openProgress: 1,
         direction: "left", leadsTo: "right-room", pairId: "right-deep",
         text: "The passage back west to the Antechamber."
       }),
-      // placeholder decorations
+
+      // ── soot-stained wall: atmospheric, always visible ─────────────
       {
         id: "obj-soot-wall", name: "Soot-Stained Wall", type: "decoration",
-        x: 200, y: 80, w: 300, h: 20,
+        x: 180, y: 60, w: 340, h: 22,
         color: "#2a2520",
         text: "Centuries of torch smoke have turned the limestone black. Faint finger-marks are pressed into the soot — left by someone feeling their way in the dark."
       },
+
+      // ── torch bracket: the puzzle trigger ─────────────────────────
+      {
+        id: "obj-bracket", name: "Empty Torch Bracket", type: "bracket",
+        x: 140, y: 195, w: 20, h: 26,
+        color: "#5a4a35",
+        mounted: false,
+        text: "An iron bracket bolted to the wall. The torch it once held is long gone. It looks like it could hold a torch again. (Hold a lit torch and press T to mount it.)"
+      },
+
+      // ── collapsed block: decoration ───────────────────────────────
       {
         id: "obj-collapsed-block", name: "Collapsed Block", type: "decoration",
-        x: 500, y: 260, w: 80, h: 60,
+        x: 530, y: 255, w: 80, h: 65,
         color: "#3e3830",
-        text: "A large limestone block has fallen from the ceiling. The gap above it is dark and impassable."
+        text: "A large limestone block has fallen from the ceiling. The gap above it is dark and silent."
+      },
+
+      // ── three wall paintings: hidden until torch is mounted ────────
+      {
+        id: "obj-painting-hunt", name: "Wall Painting — The Hunt", type: "wall-painting",
+        x: 220, y: 100, w: 90, h: 120,
+        color: "#4a3e2e",
+        hidden: true,
+        text: "A hunting scene: a pharaoh in a chariot draws a bow against a lion. The cartouche above the figure identifies him — the glyphs read AKHENATEN. The same name scratched beneath the cartouches in the Gallery."
       },
       {
-        id: "obj-bracket", name: "Empty Torch Bracket", type: "decoration",
-        x: 140, y: 200, w: 16, h: 20,
-        color: "#5a4a35",
-        text: "An iron bracket bolted to the wall. The torch it once held is long gone."
+        id: "obj-painting-offerings", name: "Wall Painting — Offerings", type: "wall-painting",
+        x: 340, y: 100, w: 90, h: 120,
+        color: "#4a3e2e",
+        hidden: true,
+        text: "A priest carries offerings before the Aten — the sun disk. The rays end in small hands, each touching a figure. This is not the Amun religion. This is Akhenaten's heresy, hidden here in secret."
+      },
+      {
+        id: "obj-painting-judgment", name: "Wall Painting — Judgment", type: "wall-painting",
+        x: 460, y: 100, w: 90, h: 120,
+        color: "#4a3e2e",
+        hidden: true,
+        text: "The Weighing of the Heart: Anubis holds the scales. On one side, a feather; on the other, a painted heart. Below: 'He who was erased shall be weighed nonetheless. Truth outlasts stone.'\n\nBeneath the painting, scratched into the plaster: AKHENATEN."
       }
     ],
     exit: null
@@ -428,6 +623,18 @@ const rooms = [
 
   // ------------------------------------------------------------------ //
   //  OSSUARY  (ossuary, 0,2) — south of bottom-room
+  //
+  //  PUZZLE: Watcher Skulls
+  //  Four "watcher" skulls each face a cardinal direction. The player
+  //  must inspect all four to record their directions. A fifth object
+  //  — the central inscription — gives a hint: "Where all watchers
+  //  agree, the path opens." The four directions triangulate to a
+  //  specific wall niche (east wall). When the player inspects the niche
+  //  after reading all four skulls, it opens and yields the Canopic Seal
+  //  (also referenced in the north-vestibule puzzle thread).
+  //
+  //  Also contains: oil flask (offering item for north-vestibule puzzle)
+  //                 incense cone (offering item for north-vestibule puzzle)
   // ------------------------------------------------------------------ //
   {
     id:   "ossuary",
@@ -436,41 +643,122 @@ const rooms = [
     description: "A vaulted bone-room. Hundreds of skulls are stacked in alcoves floor to ceiling. The silence here is absolute.",
 
     objectives: [
-      { id: "ossuary-explore", name: "Explore Ossuary", type: "objective", roomId: "ossuary", label: "Explore the Ossuary.", done: false }
+      { id: "read-watcher-skulls",  label: "Inspect all four watcher skulls.",               done: false },
+      { id: "find-ossuary-niche",   label: "Find the niche where the watchers look.",         done: false },
+      { id: "collect-ossuary-seal", label: "Collect the Canopic Seal from the niche.",        done: false }
     ],
 
     objects: [
       createDoor({
         id: "door-ossuary-up", name: "North Door",
         x: 360, y: 0, w: 80, h: 30,
-        color: "#4f3925", locked: false, openProgress: 1,   // sepulcher depths is freely accessible from here
+        color: "#4f3925", locked: false, openProgress: 1,
         direction: "up", leadsTo: "bottom-room", pairId: "bottom-ossuary",
         text: "The stair back up to the Sepulcher Depths."
       }),
-      // placeholder decorations
+
+      // ── regular skull alcoves: decoration ─────────────────────────
       {
         id: "obj-skull-alcove-1", name: "Skull Alcove", type: "decoration",
-        x: 60, y: 80, w: 50, h: 120,
+        x: 40, y: 60, w: 50, h: 140,
         color: "#3a3530",
         text: "Dozens of skulls stacked with precise care. The arrangement is deliberate — these were people of rank."
       },
       {
         id: "obj-skull-alcove-2", name: "Skull Alcove", type: "decoration",
-        x: 650, y: 80, w: 50, h: 120,
+        x: 710, y: 60, w: 50, h: 140,
         color: "#3a3530",
-        text: "A matching alcove on the opposite wall. One skull near the top has a small painted eye on its forehead."
+        text: "A matching alcove on the opposite wall. The skulls here face inward, toward the center of the room."
+      },
+
+      // ── four watcher skulls — each has a painted direction symbol ──
+      // The four directions resolve to EAST when combined (they all
+      // face the east wall: north→ look right, south→ look left toward
+      // east is actually right). Narratively each says its direction;
+      // the player must notice they all ultimately point east.
+      {
+        id: "watcher-north", name: "Watcher Skull — North", type: "watcher-skull",
+        x: 380, y: 70, w: 28, h: 28,
+        color: "#7a7060",
+        watchDirection: "east",
+        facePainted: "→",
+        inspectDone: false,
+        text: "This skull, set apart from the others, has a painted symbol on its forehead: an arrow pointing east. Its empty sockets stare toward the eastern wall."
       },
       {
-        id: "obj-central-slab", name: "Central Slab", type: "decoration",
-        x: 300, y: 200, w: 160, h: 40,
-        color: "#4a3f33",
-        text: "A flat slab at the room's center. An inscription reads: 'We who wait here were not forgotten. We wait still.'"
+        id: "watcher-south", name: "Watcher Skull — South", type: "watcher-skull",
+        x: 380, y: 390, w: 28, h: 28,
+        color: "#7a7060",
+        watchDirection: "east",
+        facePainted: "→",
+        inspectDone: false,
+        text: "A skull placed low, near the floor. The painted arrow on its brow also points east. It is oriented to face the far wall."
       },
+      {
+        id: "watcher-west", name: "Watcher Skull — West", type: "watcher-skull",
+        x: 80, y: 240, w: 28, h: 28,
+        color: "#7a7060",
+        watchDirection: "east",
+        facePainted: "→",
+        inspectDone: false,
+        text: "A skull on a small shelf, separated from the others. Its painted mark: an eastward arrow. It has been deliberately turned to face the opposite wall."
+      },
+      {
+        id: "watcher-east", name: "Watcher Skull — East", type: "watcher-skull",
+        x: 690, y: 240, w: 28, h: 28,
+        color: "#7a7060",
+        watchDirection: "east",
+        facePainted: "✦",
+        inspectDone: false,
+        text: "A skull on the east wall itself, with a star painted where the arrow would go. This one is not pointing — it is the destination. The four watchers all converge here."
+      },
+
+      // ── central inscription: gives the puzzle's solution hint ──────
+      {
+        id: "obj-central-slab", name: "Central Inscription", type: "decoration",
+        x: 290, y: 215, w: 220, h: 50,
+        color: "#4a3f33",
+        text: "An inscription at the room's center:\n\n'We who wait here were not forgotten. We wait still. Four among us watch. Follow their gaze to find what endures.'"
+      },
+
+      // ── east niche: hidden until all four watcher skulls inspected ─
+      {
+        id: "obj-ossuary-niche", name: "Wall Niche", type: "niche",
+        x: 735, y: 200, w: 30, h: 80,
+        color: "#2a2218",
+        hidden: true,
+        text: "A hidden niche in the east wall, exactly where all four watcher skulls point. Inside: a clay canopic seal, stamped with the four sons of Horus.",
+        containsItem: {
+          id: "item-canopic-seal", name: "Canopic Seal", type: "canopic-seal",
+          x: 740, y: 225, w: 16, h: 16,
+          color: "#c8b880",
+          pickedUp: false,
+          text: "A clay seal bearing the four sons of Horus. It feels important — as if it belongs somewhere specific."
+        }
+      },
+
+      // ── canopic shelf with oil and incense (offering puzzle items) ─
       {
         id: "obj-canopic-shelf", name: "Canopic Shelf", type: "decoration",
-        x: 180, y: 360, w: 120, h: 20,
+        x: 170, y: 370, w: 140, h: 22,
         color: "#5c4e3a",
-        text: "A low shelf holding four canopic jars. Their stoppers are shaped like the heads of the four sons of Horus."
+        text: "A low shelf holding funerary equipment. Among the jars, two items stand out."
+      },
+      {
+        id: "item-oil-flask", name: "Oil Flask", type: "offering-item",
+        x: 185, y: 345, w: 16, h: 22,
+        color: "#8a8060",
+        offeringType: "oil",
+        pickedUp: false,
+        text: "A small alabaster flask, still sealed. Oil — for the lamp-bowl in the Vestibule of Offerings."
+      },
+      {
+        id: "item-incense-cone", name: "Incense Cone", type: "offering-item",
+        x: 215, y: 350, w: 16, h: 16,
+        color: "#5a3a2a",
+        offeringType: "incense",
+        pickedUp: false,
+        text: "A compressed cone of kyphi incense — resin, honey, myrrh. Meant for the incense bowl in the Vestibule of Offerings."
       }
     ],
     exit: null

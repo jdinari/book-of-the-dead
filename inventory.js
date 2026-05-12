@@ -6,8 +6,11 @@
 
 function addToInventory(obj) {
   if (!obj.hasBeenInspected) {
-    ui.textContent = "You need to inspect this first.";
-    return false;
+    // offering-items and key-fragments don't require prior inspection
+    if (!["offering-item", "key-fragment", "canopic-ring", "canopic-seal"].includes(obj.type)) {
+      ui.textContent = "You need to inspect this first.";
+      return false;
+    }
   }
   if (inventory.length >= inventoryCapacity) {
     ui.textContent = "Your inventory is full.";
@@ -31,6 +34,20 @@ function addToInventory(obj) {
     if (hasFullTranslation()) {
       markObjective("collect-rosetta");
     }
+  }
+
+  // Niche reward items
+  if (obj.type === "key-fragment") {
+    markObjective("west-hall-niche");
+    ui.textContent = `You take the ${obj.name}. One piece of several.`;
+  }
+  if (obj.type === "canopic-seal") {
+    markObjective("collect-ossuary-seal");
+    ui.textContent = `You take the ${obj.name}. The clay is smooth and cool.`;
+  }
+  if (obj.type === "canopic-ring") {
+    markObjective("gallery-compartment");
+    ui.textContent = `You take the ${obj.name}.`;
   }
 
   updateUI();
@@ -75,8 +92,8 @@ function removeItemFromInventory(type) {
   for (let i = inventory.length - 1; i >= 0; i--) {
     if (inventory[i].type === type) inventory.splice(i, 1);
   }
-  if (player.heldItem?.type === type) player.heldItem = null;
-  player.inventoryIndex = Math.max(0, player.inventoryIndex - 1);
+  player.inventoryIndex = Math.max(0, Math.min(player.inventoryIndex, inventory.length - 1));
+  player.heldItem = inventory[player.inventoryIndex] || null;
   updateUI();
 }
 

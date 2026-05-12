@@ -42,12 +42,19 @@ window.addEventListener("keydown", (e) => {
   if (k === "x") {
     if (
       nearObject &&
-      ["torch", "rosetta", "scroll", "amulet"].includes(nearObject.type) &&
+      ["torch", "rosetta", "scroll", "amulet", "offering-item", "key-fragment", "canopic-ring", "canopic-seal"].includes(nearObject.type) &&
       !nearObject.pickedUp
     ) {
       addToInventory(nearObject);
     } else if (inventory.length > 0) {
       dropActiveItem();
+    }
+  }
+
+  // MOUNT TORCH IN BRACKET  (T key near bracket, holding lit torch)
+  if (k === "t") {
+    if (nearObject?.type === "bracket" && !nearObject.mounted) {
+      mountTorchInBracket(nearObject);
     }
   }
 
@@ -122,8 +129,10 @@ function update() {
   for (const obj of getCurrentObjects()) {
     if (obj.pickedUp) continue;
     if (obj.type === "torch") continue;
-    if (obj.type === "door" && !obj.locked && obj.openProgress >= 1) continue;
-   //if (obj.type === "decoration") continue;   // decorations are not solid
+    if (obj.type === "door" && !obj.locked) continue;
+    if (obj.type === "decoration") continue;   // decorations are not solid
+    if (obj.type === "niche") continue;         // niches are not solid
+    if (obj.type === "wall-painting") continue; // paintings are not solid
 
     if (isColliding({ x: nextX, y: nextY }, obj)) return;
   }
@@ -206,6 +215,7 @@ function transitionRoom(door) {
   }
 
   updateUI();
+  if (mapVisible) renderMap();
 }
 
 // =====================
@@ -253,18 +263,51 @@ function checkProximity() {
   nearObject = null;
   const range = 40;
 
+  let bestObject = null;
+  let bestDist = Infinity;
+
   for (const obj of getCurrentObjects()) {
     if (obj.pickedUp) continue;
+    if (obj.hidden) continue;
 
-    const dx   = player.x - (obj.x + obj.w / 2);
-    const dy   = player.y - (obj.y + obj.h / 2);
+    const dx = player.x - (obj.x + obj.w / 2);
+    const dy = player.y - (obj.y + obj.h / 2);
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist < range) {
-      nearObject = obj;
-      break;
+    if (dist >= range) continue;
+
+    // prioritize pickup items over scenery/niches
+    const pickupPriority = [
+      "key-fragment",
+      "canopic-ring",
+      "canopic-seal",
+      "torch",
+      "rosetta",
+      "scroll",
+      "amulet",
+      "offering-item"
+    ];
+
+    const currentPriority =
+      pickupPriority.indexOf(obj.type) !== -1
+        ? pickupPriority.indexOf(obj.type)
+        : 999;
+
+    const bestPriority =
+      bestObject && pickupPriority.indexOf(bestObject.type) !== -1
+        ? pickupPriority.indexOf(bestObject.type)
+        : 999;
+
+    if (
+      currentPriority < bestPriority ||
+      (currentPriority === bestPriority && dist < bestDist)
+    ) {
+      bestObject = obj;
+      bestDist = dist;
     }
   }
+
+  nearObject = bestObject;
 }
 
 // =====================
@@ -428,6 +471,162 @@ function drawObjects() {
         break;
       }
 
+      case "canopic": {
+        // Jar body
+        ctx.fillStyle = highlight;
+        ctx.fillRect(obj.x, obj.y + 10, obj.w, obj.h - 10);
+        // Stopper / head (oval)
+        ctx.fillStyle = obj === nearObject ? "#f0d060" : "#9a8460";
+        ctx.beginPath();
+        ctx.ellipse(obj.x + obj.w / 2, obj.y + 10, obj.w / 2, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Ritual index label
+        ctx.fillStyle = "#2a1a08";
+        ctx.font = "9px serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(obj.ritualIndex), obj.x + obj.w / 2, obj.y + obj.h * 0.6);
+        const checkDone = canopicSequence.includes(obj.ritualIndex);
+        if (checkDone) {
+          ctx.fillStyle = "#80c860";
+          ctx.font = "8px sans-serif";
+          ctx.fillText("✓", obj.x + obj.w / 2, obj.y + obj.h - 4);
+        }
+        break;
+      }
+
+      case "offering-bowl": {
+        ctx.fillStyle = obj.filled ? "#c09040" : highlight;
+        ctx.fillRect(obj.x, obj.y + obj.h * 0.4, obj.w, obj.h * 0.6);
+        // Rim
+        ctx.fillStyle = obj.filled ? "#e0b860" : "#8a7050";
+        ctx.fillRect(obj.x - 2, obj.y + obj.h * 0.35, obj.w + 4, 5);
+        if (obj.filled) {
+          // Glow
+          ctx.fillStyle = "rgba(255,200,80,0.18)";
+          ctx.beginPath();
+          ctx.ellipse(obj.x + obj.w / 2, obj.y + obj.h * 0.4, obj.w * 0.6, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      }
+
+      case "niche": {
+        if (obj.hidden) break; // invisible
+        ctx.fillStyle = "#3a2e20";
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        ctx.strokeStyle = "#c0a050";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+        // Glow hint
+        ctx.fillStyle = "rgba(220,180,80,0.15)";
+        ctx.fillRect(obj.x + 2, obj.y + 2, obj.w - 4, obj.h - 4);
+        break;
+      }
+
+      case "bracket": {
+        ctx.fillStyle = obj.mounted ? "#8a6a40" : highlight;
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        // Bracket arm
+        ctx.strokeStyle = obj.mounted ? "#c09050" : "#706050";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(obj.x, obj.y + 4);
+        ctx.lineTo(obj.x + obj.w + 8, obj.y + 4);
+        ctx.stroke();
+        break;
+      }
+
+      case "wall-painting": {
+        if (obj.hidden) {
+          // Draw as indistinct dark smudge
+          ctx.fillStyle = "#201c18";
+          ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        } else {
+          // Revealed painting: warm pigment blocks
+          ctx.fillStyle = "#6a5030";
+          ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+          ctx.fillStyle = "#a07840";
+          ctx.fillRect(obj.x + 4, obj.y + 4, obj.w - 8, obj.h * 0.55);
+          ctx.fillStyle = "#4a3820";
+          ctx.fillRect(obj.x + 4, obj.y + obj.h * 0.6, obj.w - 8, obj.h * 0.35);
+          // Border
+          ctx.strokeStyle = obj === nearObject ? "#f9d342" : "#c09050";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+        }
+        break;
+      }
+
+      case "cartouche": {
+        ctx.fillStyle = highlight;
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        // Oval border (cartouche shape)
+        ctx.strokeStyle = "#3e2f1f";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(obj.x + obj.w / 2, obj.y + obj.h / 2, obj.w / 2, obj.h / 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        if (obj.inspectDone) {
+          ctx.fillStyle = "#c0a050";
+          ctx.font = "7px serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(obj.nameFragment || "", obj.x + obj.w / 2, obj.y + obj.h / 2);
+        }
+        break;
+      }
+
+      case "cartouche-erased": {
+        ctx.fillStyle = obj.restored ? "#9a8450" : (obj === nearObject ? "#7a6442" : highlight);
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        ctx.strokeStyle = "#3e2f1f";
+        ctx.lineWidth = 2;
+        // Broken oval
+        ctx.beginPath();
+        ctx.ellipse(obj.x + obj.w / 2, obj.y + obj.h / 2, obj.w / 2, obj.h / 2, 0, 0, Math.PI * 2);
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (obj.restored) {
+          ctx.fillStyle = "#f0d070";
+          ctx.font = "7px serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("ATEN", obj.x + obj.w / 2, obj.y + obj.h / 2);
+        }
+        break;
+      }
+
+      case "watcher-skull": {
+        // Skull circle
+        ctx.fillStyle = highlight;
+        ctx.beginPath();
+        ctx.arc(obj.x + obj.w / 2, obj.y + obj.h / 2, obj.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+        // Painted arrow / star
+        ctx.fillStyle = obj.inspectDone ? "#80c860" : "#c07030";
+        ctx.font = `${obj.w * 0.7}px serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(obj.facePainted, obj.x + obj.w / 2, obj.y + obj.h / 2 + 1);
+        break;
+      }
+
+      case "offering-item":
+      case "key-fragment":
+      case "canopic-ring":
+      case "canopic-seal": {
+        ctx.fillStyle = highlight;
+        ctx.beginPath();
+        ctx.arc(obj.x + obj.w / 2, obj.y + obj.h / 2, Math.min(obj.w, obj.h) / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#c0a050";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        break;
+      }
+
       default: {
         // altar, tablet, scroll, amulet, decoration, etc.
         ctx.fillStyle = highlight;
@@ -465,10 +664,21 @@ function drawPlayer() {
 // DRAW — LIGHTING
 // =====================
 function drawLighting() {
-  const baseRadius = player.lampOn ? 200 : 60;
+  // In the deep corridor, if the torch is mounted, use its position as the light source
+  const inCorridor = currentRoom?.id === "deep-corridor";
+  const useCorridorLight = inCorridor && corridorTorchMounted;
+
+  const bracket = useCorridorLight
+    ? currentRoom.objects.find(o => o.type === "bracket")
+    : null;
+
+  const lightX = bracket ? bracket.x + bracket.w / 2 : player.x;
+  const lightY = bracket ? bracket.y + bracket.h / 2 : player.y;
+
+  const baseRadius = (player.lampOn || useCorridorLight) ? 200 : 60;
   const pulse      = 1 + Math.sin(gameTime * 2.5) * 0.12;
   const radius     = baseRadius * pulse;
-  const ambient    = player.lampOn ? 0.55 : 0.65;
+  const ambient    = (player.lampOn || useCorridorLight) ? 0.40 : 0.65;
 
   ctx.save();
 
@@ -477,15 +687,36 @@ function drawLighting() {
   ctx.fillRect(0, 0, world.width, world.height);
 
   ctx.globalCompositeOperation = "lighter";
-  const light = ctx.createRadialGradient(player.x, player.y, radius * 0.1, player.x, player.y, radius);
-  light.addColorStop(0,   "rgba(255,240,200,0.25)");
-  light.addColorStop(0.5, "rgba(255,210,140,0.10)");
-  light.addColorStop(1,   "rgba(0,0,0,0)");
 
-  ctx.fillStyle = light;
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
-  ctx.fill();
+  // If corridor torch is mounted, draw both the bracket light and a smaller player light
+  if (useCorridorLight) {
+    const bracketLight = ctx.createRadialGradient(lightX, lightY, radius * 0.1, lightX, lightY, radius);
+    bracketLight.addColorStop(0,   "rgba(255,230,170,0.30)");
+    bracketLight.addColorStop(0.5, "rgba(255,200,120,0.12)");
+    bracketLight.addColorStop(1,   "rgba(0,0,0,0)");
+    ctx.fillStyle = bracketLight;
+    ctx.beginPath();
+    ctx.arc(lightX, lightY, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Small ambient halo around player so they aren't blind
+    const playerHalo = ctx.createRadialGradient(player.x, player.y, 5, player.x, player.y, 60);
+    playerHalo.addColorStop(0, "rgba(255,240,200,0.10)");
+    playerHalo.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = playerHalo;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, 60, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    const light = ctx.createRadialGradient(player.x, player.y, radius * 0.1, player.x, player.y, radius);
+    light.addColorStop(0,   "rgba(255,240,200,0.25)");
+    light.addColorStop(0.5, "rgba(255,210,140,0.10)");
+    light.addColorStop(1,   "rgba(0,0,0,0)");
+    ctx.fillStyle = light;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.restore();
 }
@@ -514,7 +745,7 @@ function loop() {
   drawLighting();
 
   checkDoorTransition();
-  if (mapVisible) renderMap();
+  updateMapDot();
 
   requestAnimationFrame(loop);
 }
