@@ -6,22 +6,6 @@ A top-down 2D Egyptian tomb exploration game built in vanilla JavaScript (no fra
 
 ---
 
-## Gameplay
-
-Navigate a tomb of interconnected chambers, each with its own puzzle:
-
-| Room | Puzzle |
-|------|--------|
-| **Burial Chamber** | Collect Rosetta fragments, decode the glyph word *LIGHT*, speak to the ushabti |
-| **Antechamber** | Find the scroll, use it to read the tablet, unlock the glyph notebook |
-| **West Hall** | Perform the canopic jar ritual in correct order (Imsety → Hapy → Duamutef → Qebehsenuef) |
-| **North Vestibule** | Fill three offering bowls with the correct items (bread, oil, incense) |
-| **East Gallery** | Read intact cartouches to reconstruct the erased pharaoh's name |
-| **Deep Corridor** | Light and mount the torch to reveal hidden wall paintings |
-| **Ossuary** | Inspect all four watcher skulls to reveal the hidden niche |
-
----
-
 ## Controls
 
 | Key | Action |
