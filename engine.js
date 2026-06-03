@@ -6,9 +6,68 @@
 // =====================
 
 // =====================
-// INPUT
+// TITLE SCREEN
 // =====================
+let titleScreenActive = true;
+let titleAlpha = 1;
+let titleFadeOut = false;
+
+function drawTitleScreen() {
+  ctx.save();
+  ctx.globalAlpha = titleAlpha;
+  ctx.fillStyle = "#060502";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  // Decorative border
+  ctx.strokeStyle = `rgba(194, 168, 107, ${titleAlpha * 0.6})`;
+  ctx.lineWidth = 1;
+  const bw = Math.min(600, canvas.width - 80);
+  const bh = 320;
+  const bx = cx - bw / 2;
+  const by = cy - bh / 2;
+  ctx.strokeRect(bx, by, bw, bh);
+  ctx.strokeRect(bx + 8, by + 8, bw - 16, bh - 16);
+
+  // Glyphs header
+  ctx.fillStyle = `rgba(194, 168, 107, ${titleAlpha * 0.8})`;
+  ctx.font = "28px serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("𓂀  𓄿  𓈖  𓏏  𓊪", cx, by + 52);
+
+  // Title
+  ctx.fillStyle = `rgba(247, 231, 200, ${titleAlpha})`;
+  ctx.font = `bold ${Math.min(52, bw / 10)}px Georgia, serif`;
+  ctx.fillText("BOOK OF THE DEAD", cx, cy - 20);
+
+  // Subtitle
+  ctx.font = `${Math.min(18, bw / 28)}px Georgia, serif`;
+  ctx.fillStyle = `rgba(200, 180, 140, ${titleAlpha * 0.85})`;
+  ctx.fillText("A Tomb of Glyphs, Rituals, and Forgotten Names", cx, cy + 24);
+
+  // Prompt
+  const pulse = 0.6 + Math.sin(gameTime * 3) * 0.4;
+  ctx.font = "15px Georgia, serif";
+  ctx.fillStyle = `rgba(240, 220, 170, ${titleAlpha * pulse})`;
+  ctx.fillText("Press  ENTER  or  SPACE  to begin", cx, by + bh - 44);
+
+  ctx.restore();
+}
+
+function startGame() {
+  titleFadeOut = true;
+}
+
 window.addEventListener("keydown", (e) => {
+  if (titleScreenActive && (e.key === "Enter" || e.key === " ")) {
+    startGame();
+    return;
+  }
+  if (titleScreenActive) return; // block all other keys during title
+
   const k = e.key.toLowerCase();
   keys[k] = true;
 
@@ -125,17 +184,32 @@ function update() {
   const moveX = nextX - player.x;
   const moveY = nextY - player.y;
 
-  // solid-object collision
-  for (const obj of getCurrentObjects()) {
-    if (obj.pickedUp) continue;
-    if (obj.type === "torch") continue;
-    if (obj.type === "door" && !obj.locked) continue;
-    if (obj.type === "decoration") continue;   // decorations are not solid
-    if (obj.type === "niche") continue;         // niches are not solid
-    if (obj.type === "wall-painting") continue; // paintings are not solid
+  // solid-object collision — axis-separated so player slides along walls
+  const isSolid = (obj) => {
+    if (obj.pickedUp) return false;
+    if (obj.type === "torch") return false;
+    if (obj.type === "door" && !obj.locked) return false;
+    if (obj.type === "decoration") return false;
+    if (obj.type === "niche") return false;
+    if (obj.type === "wall-painting") return false;
+    return true;
+  };
 
-    if (isColliding({ x: nextX, y: nextY }, obj)) return;
+  let blockedX = false;
+  let blockedY = false;
+  const pBox = { w: player.size, h: player.size };
+
+  for (const obj of getCurrentObjects()) {
+    if (!isSolid(obj)) continue;
+    if (isColliding({ x: nextX, y: player.y, ...pBox }, obj)) blockedX = true;
+    if (isColliding({ x: player.x, y: nextY, ...pBox }, obj)) blockedY = true;
   }
+
+  if (blockedX) nextX = player.x;
+  if (blockedY) nextY = player.y;
+
+  // if both blocked (corner), abort entirely
+  if (blockedX && blockedY) return;
 
   // push torch with player movement
   for (const obj of getCurrentObjects()) {
@@ -728,11 +802,24 @@ function loop() {
   resetTransform();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // Title screen takes over until dismissed
+  if (titleScreenActive) {
+    gameTime += 0.03;
+    if (titleFadeOut) {
+      titleAlpha = Math.max(0, titleAlpha - 0.03);
+      if (titleAlpha <= 0) titleScreenActive = false;
+    }
+    drawTitleScreen();
+    requestAnimationFrame(loop);
+    return;
+  }
+
   update();
   updateDoors();
   updateCamera();
   checkProximity();
   updateTorchPhysics();
+  checkDoorTransition();   // before draw — room change applies this frame
 
   gameTime += 0.03;
   cameraState.zoom += (cameraState.targetZoom - cameraState.zoom) * 0.1;
@@ -744,7 +831,7 @@ function loop() {
   drawPlayer();
   drawLighting();
 
-  checkDoorTransition();
+  resetTransform();        // reset after world-space draw before HUD updates
   updateMapDot();
 
   requestAnimationFrame(loop);

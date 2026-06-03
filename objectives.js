@@ -64,14 +64,7 @@ function decodeGlyphs(obj) {
   }
 }
 
-function checkGlyphSolution(obj) {
-  for (const g of Object.keys(GLYPH_SOLUTION)) {
-    if ((playerGlyphMap[g] || "") !== GLYPH_SOLUTION[g]) return;
-  }
-  glyphDecoded = true;
-  markObjective("decode-glyphs");
-  ui.textContent = "The glyphs resolve: LIGHT AND TRUTH OPEN THE EASTERN PASSAGE.";
-}
+// Glyph solution validation is handled inside decodeGlyphs() via hasFullTranslation().
 
 // =====================
 // DOOR UNLOCK
@@ -323,8 +316,8 @@ function inspectObject(obj) {
       // Mark objective after inspecting any painting once lit
       const room = rooms.find(r => r.id === "deep-corridor");
       const allPaintings = room.objects.filter(o => o.type === "wall-painting");
-      const seenCount = allPaintings.filter(p => p.inspectDone).length + 1; // +1 for this one
-      obj.inspectDone = true;
+      obj.inspectDone = true; // mark before counting so this one is included
+      const seenCount = allPaintings.filter(p => p.inspectDone).length;
       if (seenCount >= allPaintings.length) {
         markObjective("read-wall-paintings");
         ui.textContent = obj.text + "\n\nYou have read all three paintings. The name AKHENATEN now connects the corridor to the Gallery of Kings.";

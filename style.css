@@ -152,6 +152,7 @@ canvas {
   letter-spacing: 0.3px;
 
   pointer-events: none;
+  display: none;
 }
 
 #help-text {
