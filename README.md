@@ -2,7 +2,7 @@
 
 A top-down 2D Egyptian tomb exploration game built in vanilla JavaScript (no framework, no build step). You explore a multi-room tomb, decipher hieroglyphs, perform ancient rituals, and piece together the identity of a forgotten pharaoh.
 
-**[▶ Play it live →](https://your-github-username.github.io/book-of-the-dead/)** *(update link after enabling GitHub Pages)*
+**[▶ Play it live →](https://jdinari.github.io/book-of-the-dead/)** *(update link after enabling GitHub Pages)*
 
 ---
 
