@@ -145,5 +145,6 @@ const MAP_LAYOUT = {
   "east-gallery":    { x:  1, y:  1 },  // east  of bottom-room
   "deep-corridor":   { x:  2, y:  0 },  // east  of right-room
   "ossuary":         { x:  0, y:  2 },  // south of bottom-room
+  "inner-sanctum":   { x:  0, y: -2 },  // north of north-vestibule (secret)
 };
 

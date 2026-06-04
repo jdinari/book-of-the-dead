@@ -6,48 +6,53 @@
 // USHABTI HINT SYSTEM
 // =====================
 
-// Hint lines keyed by room id — the ushabtis know the current room's secrets
+// Hint lines keyed by room id — each ushabti god speaks to their domain
 const USHABTI_HINTS = {
   "burial-chamber": [
-    "Seek the five golden fragments scattered about this chamber. Each carries a symbol that, once learned, gives voice to the stone inscription above.",
-    "The glyph stone above holds a secret word. Collect the Rosetta pieces, then stand before it and press G to decode what it says.",
-    "Touch me and my kin — we carry whispers from those who built this place. Inspection brings revelation.",
-    "The torch lies near the sarcophagus. You will need its light in darker passages ahead. Take it, then press L to ignite it."
+    "Anubis weighs the heart. Find the torch first — its light will guide you through the passages ahead. Press L to ignite it once picked up.",
+    "Seek the five golden Rosetta fragments scattered about this chamber. Each bears a hieroglyph. Collect them all, then approach the glyph stone and press G.",
+    "Thoth records all knowledge. The glyph stone above holds the sacred word — but you must collect all five Rosetta pieces before you can decode it.",
+    "When all trials of this chamber are complete, the sarcophagus shall open. The pharaoh waits to be acknowledged."
   ],
   "right-room": [
-    "The scroll on the eastern shelf grants understanding. Find it first, then approach the tablet.",
-    "The tablet reveals deeper truths — but only if you carry the scroll. Bring both knowledge and curiosity.",
-    "Read both objects in order: scroll first, then tablet. The sequence matters in all things sacred."
+    "Horus sees far. The scroll on the eastern shelf holds the key to understanding the tablet. Find it first.",
+    "Read the scroll, then approach the great tablet. Knowledge must be carried, not merely sought.",
+    "The deep corridor lies east from here — but prepare yourself first. Read all you can in this chamber."
   ],
   "bottom-room": [
-    "Something gleams in the shadows of this room. Look carefully — the amulet is hidden, not lost.",
-    "The altar at the center hungers for an offering. Carry the amulet you find, then press E at the altar.",
-    "The path deeper opens only when the altar is satisfied."
+    "Osiris commands the dead. Something gleams hidden in the western shadows of this chamber. Seek it carefully.",
+    "The altar at the center of this room hungers for an offering. Carry the amulet you find, then press E at the altar to place it.",
+    "The east passage opens when the altar is satisfied. All things must be given before they can be received."
   ],
   "west-hall": [
-    "Four sons of Horus guard the passage of the dead. Their order is sacred: Imsety, then Hapy, then Duamutef, then Qebehsenuef.",
-    "Study each jar carefully — the numbers on them reveal the sequence. Touch them in the right order.",
-    "If you break the sequence, begin again with Imsety, the human-headed son. Patience is an offering."
+    "Sekhmet speaks the ritual order: Imsety the human-headed first, then Hapy the baboon, then Duamutef the jackal, then Qebehsenuef the falcon.",
+    "Touch each canopic jar in sequence. If you err, begin again from Imsety. The rite forgives those who return to the beginning.",
+    "The niche shall open when the four sons are honoured in their proper order. Patience, seeker."
   ],
   "north-vestibule": [
-    "Three bowls await three offerings. The bread is hidden in the chest to the south. Seek oil and incense elsewhere in the tomb.",
-    "The oil and incense offerings lie deeper — in the Ossuary below. Gather them, then return here to complete the ritual.",
-    "Fill all three bowls and the sealed alcove above will open."
+    "Hathor accepts three offerings: bread for the body, oil for the flame, smoke for the gods. The bread lies in the cedar chest to the south.",
+    "The oil flask and incense cone are not here — seek them in the deeper places of the tomb. The Ossuary holds what you need.",
+    "Fill all three bowls and the sealed alcove above shall open onto a hidden sanctum. Few have passed this threshold."
   ],
   "east-gallery": [
-    "Two cartouches bear fragments of a hidden name, scratched beneath the official inscriptions. Read both intact cartouches first.",
-    "When you know both syllables of the name, approach the erased cartouche and press E. Speak the name to restore it.",
-    "AKHEN and ATEN — two syllables scratched by a loyal hand. Together they form the name the priests tried to erase."
+    "Ra illuminates what was hidden. Two intact cartouches each bear a scratched syllable — read both before approaching the erased one.",
+    "AKHEN from the first. ATEN from the third. Together they form the name of a king the priests tried to unmake. Speak it at the erased cartouche.",
+    "He who is named shall be remembered. He who is erased shall be restored by those who seek truth."
   ],
   "deep-corridor": [
-    "Darkness conceals what the painters hid here. Carry a lit torch to the bracket on the western wall and press T to mount it.",
-    "The wall paintings remain invisible until the corridor is lit. Light is truth in these halls.",
-    "Once the torch burns in its bracket, three scenes will emerge. Each one names the erased pharaoh."
+    "Sobek lurks in darkness. Carry a lit torch to the iron bracket on the west wall and press T to mount it — then light shall reveal the hidden paintings.",
+    "The three wall scenes are invisible in darkness. Light the corridor first. Only then will the pharaoh's story emerge from the stone.",
+    "Once lit, this corridor will stay lit — even when you leave. The torch becomes a waypoint."
   ],
   "ossuary": [
-    "Four skulls watch this room. Each has been placed deliberately — inspect all four to learn what they see.",
-    "The painted arrows all converge on a single point. Follow their gaze to find the hidden niche on the east wall.",
-    "The oil flask and incense cone on the southern shelf belong in the Vestibule of Offerings. Take them when you are ready."
+    "Nephthys guards the dead with her wings. Four watcher skulls have been placed apart from the others — inspect each one to learn what they see.",
+    "All four skulls point in the same direction. Stand where their gazes converge, on the east wall, and press E on the niche you find there.",
+    "The oil flask and incense on the southern shelf belong in the Vestibule of Offerings above. Take them when you are ready."
+  ],
+  "inner-sanctum": [
+    "Ptah the creator speaks plainly: you have honoured the gods and fed the dead. The Heart Scarab on the altar is yours — take it.",
+    "Read the offering stele and the wall inscription. The story of Akhenaten is told in full here, preserved in this sealed place for three thousand years.",
+    "The Heart Scarab carries spell 30B from the Book of the Dead. It is the final offering — the plea to the heart not to testify against its owner."
   ]
 };
 
@@ -76,18 +81,12 @@ function showUshabtiSpeech(text) {
   const textEl = document.getElementById("ushabti-speech-text");
   if (!bubble || !textEl) return;
   textEl.textContent = text;
-  bubble.style.display = "block";
+  bubble.classList.add("visible");
   if (ushabtiSpeechTimeout) clearTimeout(ushabtiSpeechTimeout);
   ushabtiSpeechTimeout = setTimeout(() => {
-    bubble.style.display = "none";
-  }, 7000);
+    bubble.classList.remove("visible");
+  }, 6000);
 }
-
-// Wire up hint button
-document.getElementById("hint-btn").addEventListener("click", () => {
-  const hint = getUshabtiHint();
-  showUshabtiSpeech(hint);
-});
 
 // =====================
 // INSPECT UI
@@ -101,9 +100,9 @@ function showInspectUI(obj) {
     lines.push("An ancient sarcophagus carved with prayers for the afterlife.");
     lines.push("It may open once the door is unlocked and the fire is lit.");
   } else if (obj.type === "ushabti") {
-    lines.push({ head: true, text: "Ushabti" });
-    lines.push(obj.text || "A small ushabti statue, its gaze fixed on you.");
-    lines.push("Press H or click 'Ask Ushabti' for guidance from these figures.");
+    const godName = obj.name || "Ushabti";
+    lines.push({ head: true, text: godName });
+    lines.push(obj.text || "A small ushabti figurine, its gaze fixed on you.");
   } else if (obj.type === "torch") {
     lines.push({ head: true, text: "Bronze Torch" });
     lines.push(obj.text || "A bronze torch. It will help you see deeper in the tomb.");
@@ -356,7 +355,7 @@ function toggleMap() {
 function setHUDVisible(visible) {
   document.getElementById("quest-panel").style.display    = visible ? "block" : "none";
   document.getElementById("inventory-grid").style.display = visible ? "grid"  : "none";
-  document.getElementById("hint-btn").style.display       = visible ? "block" : "none";
+  
   if (!visible) {
     mapPanel.classList.add("hidden");
     mapVisible = false;

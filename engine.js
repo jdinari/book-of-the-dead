@@ -3,6 +3,21 @@
 // =====================
 
 // =====================
+// ROOM FADE TRANSITION
+// =====================
+let roomFade = 0;
+let roomFadingOut = false;
+let roomFadingIn  = false;
+let pendingDoor   = null;
+
+// =====================
+// SARCOPHAGUS ANIMATION
+// =====================
+let sarcophagusLidOffset = 0;
+let mummySitProgress = 0;
+let sarcOpenTriggered = false;
+
+// =====================
 // TITLE SCREEN
 // =====================
 let titleScreenActive = true;
@@ -151,7 +166,7 @@ function drawTitleScreen() {
   ctx.letterSpacing = "0.1em";
   ctx.fillText("WASD · Move      E · Inspect      X · Pick up      L · Light torch      M · Map", cx, legendY + 8);
   ctx.font = `10px 'Cinzel', serif`;
-  ctx.fillText("H · Ask Ushabti for hints      V · Glyph Codex      Q · Cycle items", cx, legendY + 30);
+  ctx.fillText("E · Inspect ushabti for guidance      V · Glyph Codex      Q · Cycle items", cx, legendY + 30);
 
   // Pulse prompt
   const pulse = 0.55 + Math.sin(gameTime * 2.5) * 0.45;
@@ -185,12 +200,6 @@ window.addEventListener("keydown", (e) => {
       return;
     }
     toggleNotebook();
-  }
-
-  // HINT — H key also triggers ushabti hint
-  if (k === "h") {
-    const hint = getUshabtiHint();
-    showUshabtiSpeech(hint);
   }
 
   // INSPECT / CLOSE
@@ -352,14 +361,62 @@ function checkDoorTransition() {
   }
 }
 
+// =====================
+// SARCOPHAGUS OPEN ANIMATION
+// =====================
+function checkSarcophagusOpen() {
+  if (sarcOpenTriggered) return;
+  if (currentRoom?.id !== "burial-chamber") return;
+  const objectives = currentRoom.objectives;
+  if (!objectives || !objectives.every(o => o.done)) return;
+
+  // All burial chamber objectives complete — open the sarcophagus
+  sarcOpenTriggered = true;
+  const sarc = currentRoom.objects.find(o => o.type === "sarcophagus");
+  if (sarc) {
+    sarc.opening = true;
+    sarc.opened  = false;
+  }
+}
+
+function updateSarcophagus() {
+  const sarc = currentRoom?.objects?.find(o => o.type === "sarcophagus");
+  if (!sarc || !sarc.opening) return;
+
+  // Phase 1: lid slides off (0 → 60 over ~90 frames)
+  if (sarcophagusLidOffset < 60) {
+    sarcophagusLidOffset = Math.min(60, sarcophagusLidOffset + 0.67);
+  } else if (!sarc.opened) {
+    sarc.opened = true;
+    sarc.opening = false;
+    _invalidateBgCache();
+  }
+
+  // Phase 2: mummy sits up after lid is mostly gone
+  if (sarcophagusLidOffset > 30 && mummySitProgress < 1) {
+    mummySitProgress = Math.min(1, mummySitProgress + 0.008);
+  }
+}
+
 function transitionRoom(door) {
   if (!door || door.locked) return;
+  if (roomFadingOut || roomFadingIn) return; // already transitioning
+  pendingDoor = door;
+  roomFadingOut = true;
+}
+
+function _doRoomTransition(door) {
   const nextRoom = rooms.find(r => r.id === door.leadsTo);
   if (!nextRoom) return;
   currentRoom = nextRoom;
-  _invalidateBgCache(); // force background re-render for new room
+  _invalidateBgCache();
   currentRoom.visited = true;
   syncObjectivesFromGameState();
+  // Reset sarcophagus animation state when leaving/entering burial chamber
+  if (nextRoom.id === "burial-chamber") {
+    const sarc = currentRoom.objects.find(o => o.type === "sarcophagus");
+    if (sarc && !sarcOpenTriggered) { sarcophagusLidOffset = 0; mummySitProgress = 0; }
+  }
   const matchingDoor = currentRoom.objects.find(obj => obj.type === "door" && obj.pairId === door.pairId);
   if (matchingDoor) {
     const cx = matchingDoor.x + matchingDoor.w / 2;
@@ -373,9 +430,29 @@ function transitionRoom(door) {
   if (mapVisible) renderMap();
 }
 
-// =====================
-// TORCH PHYSICS
-// =====================
+function updateRoomFade() {
+  if (roomFadingOut) {
+    roomFade = Math.min(1, roomFade + 0.07);
+    if (roomFade >= 1 && pendingDoor) {
+      _doRoomTransition(pendingDoor);
+      pendingDoor   = null;
+      roomFadingOut = false;
+      roomFadingIn  = true;
+    }
+  } else if (roomFadingIn) {
+    roomFade = Math.max(0, roomFade - 0.055);
+    if (roomFade <= 0) roomFadingIn = false;
+  }
+}
+
+function drawRoomFade() {
+  if (roomFade <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = `rgba(0,0,0,${roomFade})`;
+  ctx.fillRect(0, 0, world.width, world.height);
+  ctx.restore();
+}
 function updateTorchPhysics() {
   for (const obj of getCurrentObjects()) {
     if (!obj || obj.type !== "torch" || obj.pickedUp) continue;
@@ -496,6 +573,7 @@ function _drawRoomBgToContext(c, roomId) {
     "east-gallery":    { floor: "#2c2518", ceiling: "#1a1610", wall: "#26201a", accent: "#3c3020" },
     "deep-corridor":   { floor: "#1c1812", ceiling: "#0e0c08", wall: "#18150e", accent: "#28220e" },
     "ossuary":         { floor: "#201c18", ceiling: "#100e0c", wall: "#1c1916", accent: "#2c2820" },
+    "inner-sanctum":   { floor: "#1e1a14", ceiling: "#0c0a08", wall: "#1a1610", accent: "#3a2e18" },
   };
   const theme = roomThemes[roomId] || roomThemes["burial-chamber"];
 
@@ -712,6 +790,39 @@ function drawRoomEnvironment(roomId, theme, c) {
     c.restore();
     drawFriezeStrip(c, 0, 75, world.width, 8);
 
+  } else if (roomId === "inner-sanctum") {
+    // Tiny sealed chamber — ornate walls, perfectly preserved paint
+    c.save();
+    // Rich painted panels on each wall
+    c.globalAlpha = 0.18;
+    c.fillStyle = "#c2a86b";
+    c.fillRect(10, 65, world.width - 20, 16);  // top frieze
+    c.fillRect(10, world.height - 65, world.width - 20, 16);  // bottom frieze
+    c.fillRect(10, 65, 16, world.height - 130);  // left pillar
+    c.fillRect(world.width - 26, 65, 16, world.height - 130);  // right pillar
+    c.restore();
+    drawFriezeStrip(c, 0, 62, world.width, 18);
+    drawFriezeStrip(c, 0, world.height - 80, world.width, 18);
+    // Votive candles — small warm glows along the walls
+    c.save();
+    c.globalAlpha = 0.08;
+    for (const cx2 of [60, 160, 260, 540, 640, 740]) {
+      const cg2 = c.createRadialGradient(cx2, world.height - 50, 0, cx2, world.height - 50, 30);
+      cg2.addColorStop(0, "#f0c860"); cg2.addColorStop(1, "rgba(0,0,0,0)");
+      c.fillStyle = cg2; c.fillRect(cx2 - 30, world.height - 80, 60, 60);
+    }
+    c.restore();
+    // Offering petals scatter
+    c.save();
+    c.globalAlpha = 0.1;
+    c.fillStyle = "#c8303a";
+    for (let i = 0; i < 12; i++) {
+      const px = 200 + (i * 37) % 400;
+      const py = 320 + (i * 19) % 80;
+      c.beginPath(); c.ellipse(px, py, 3, 5, i * 0.5, 0, Math.PI*2); c.fill();
+    }
+    c.restore();
+
   } else if (roomId === "ossuary") {
     // Skull alcove walls on sides
     drawFriezeStrip(c, 0, 75, world.width, 10);
@@ -802,116 +913,505 @@ function drawObjects() {
     ctx.save();
 
     const isNear = obj === nearObject;
-    const pulse  = isNear ? (0.85 + Math.sin(gameTime * 4) * 0.15) : 1;
+    const pulse  = isNear ? (0.88 + Math.sin(gameTime * 1.2) * 0.12) : 1;
 
     switch (obj.type) {
 
       case "sarcophagus": {
+        const sw = obj.w, sh = obj.h;
+        const cx = obj.x + sw / 2;
+
         // Shadow
-        ctx.fillStyle = "rgba(0,0,0,0.4)";
-        ctx.fillRect(obj.x + 4, obj.y + 4, obj.w, obj.h);
-        // Main body gradient
-        const sg = ctx.createLinearGradient(obj.x, obj.y, obj.x, obj.y + obj.h);
-        sg.addColorStop(0, "#a07848");
-        sg.addColorStop(0.3, "#8b6b3f");
-        sg.addColorStop(1, "#5a4025");
-        ctx.fillStyle = sg;
-        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-        // Head mask area
-        const hg = ctx.createLinearGradient(obj.x + 18, obj.y, obj.x + 54, obj.y);
-        hg.addColorStop(0, "#c09050"); hg.addColorStop(0.5, "#e0b870"); hg.addColorStop(1, "#c09050");
-        ctx.fillStyle = hg;
-        ctx.fillRect(obj.x + 18, obj.y + 4, 36, 22);
-        // Face oval
-        ctx.fillStyle = "#d4a86a";
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.fillRect(obj.x + 5, obj.y + 5, sw, sh);
+
+        // ── SARCOPHAGUS BOX (always present) ──────────────────────
+        // Box body — painted limestone with cartouche panels
+        const boxG = ctx.createLinearGradient(obj.x, obj.y, obj.x + sw, obj.y + sh);
+        boxG.addColorStop(0,   "#5a4830");
+        boxG.addColorStop(0.3, "#7a6040");
+        boxG.addColorStop(0.7, "#6a5438");
+        boxG.addColorStop(1,   "#4a3a22");
+        ctx.fillStyle = boxG;
+        // Slightly tapered — wider at head end (left in top-down view)
         ctx.beginPath();
-        ctx.ellipse(obj.x + obj.w / 2, obj.y + 13, 12, 9, 0, 0, Math.PI * 2);
+        ctx.moveTo(obj.x,       obj.y + 4);
+        ctx.lineTo(obj.x + sw,  obj.y + 6);
+        ctx.lineTo(obj.x + sw,  obj.y + sh - 6);
+        ctx.lineTo(obj.x,       obj.y + sh - 4);
+        ctx.closePath();
         ctx.fill();
-        // Eyes
-        ctx.fillStyle = "#2a1a08";
-        ctx.fillRect(obj.x + obj.w/2 - 7, obj.y + 10, 4, 3);
-        ctx.fillRect(obj.x + obj.w/2 + 3, obj.y + 10, 4, 3);
-        // Cross-band lines
-        ctx.strokeStyle = "#4d3b26"; ctx.lineWidth = 1.5;
-        for (let i = 1; i < 4; i++) {
-          ctx.beginPath();
-          ctx.moveTo(obj.x + 12, obj.y + 8 + i * 8);
-          ctx.lineTo(obj.x + obj.w - 12, obj.y + 8 + i * 8);
-          ctx.stroke();
+
+        // Cartouche panel on body
+        ctx.fillStyle = "rgba(194,168,107,0.12)";
+        ctx.fillRect(obj.x + 24, obj.y + 8, sw - 48, sh - 16);
+        ctx.strokeStyle = "rgba(194,168,107,0.3)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(obj.x + 24, obj.y + 8, sw - 48, sh - 16);
+
+        // Hieroglyphs on body
+        ctx.fillStyle = "rgba(194,168,107,0.45)";
+        ctx.font = "8px serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const glyphs = ["𓂀","𓄿","𓏏","𓇋","𓁹"];
+        for (let gi = 0; gi < glyphs.length; gi++) {
+          ctx.fillText(glyphs[gi], obj.x + 38 + gi * 10, obj.y + sh / 2);
         }
-        // Gold border
-        ctx.strokeStyle = isNear ? "#f9d342" : "#c09050"; ctx.lineWidth = 2;
-        ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+
+        // Foot end ornament
+        ctx.fillStyle = "rgba(194,168,107,0.2)";
+        ctx.fillRect(obj.x + sw - 18, obj.y + 4, 12, sh - 8);
+
+        // ── MUMMY (sits up if opened) ──────────────────────────────
+        if (obj.opened && mummySitProgress > 0) {
+          const sitAngle = (mummySitProgress * Math.PI * 0.45); // 0 → ~80deg lean
+          const mummyH = sh * 2.2;
+          ctx.save();
+          ctx.translate(cx - sw * 0.1, obj.y + sh * 0.5);
+          ctx.rotate(-sitAngle);
+          // Wrapping body
+          const mbg = ctx.createLinearGradient(-sw * 0.3, -mummyH, sw * 0.3, 0);
+          mbg.addColorStop(0, "#d8c898");
+          mbg.addColorStop(0.4, "#c0ac80");
+          mbg.addColorStop(1, "#a09060");
+          ctx.fillStyle = mbg;
+          ctx.beginPath();
+          ctx.moveTo(-sw * 0.28, 0);
+          ctx.lineTo(-sw * 0.18, -mummyH * 0.85);
+          ctx.lineTo(-sw * 0.1,  -mummyH);
+          ctx.lineTo(sw * 0.1,   -mummyH);
+          ctx.lineTo(sw * 0.18,  -mummyH * 0.85);
+          ctx.lineTo(sw * 0.28,  0);
+          ctx.closePath();
+          ctx.fill();
+          // Wrap band lines
+          ctx.strokeStyle = "rgba(160,130,80,0.5)";
+          ctx.lineWidth = 1;
+          for (let b = 1; b < 7; b++) {
+            const by = -mummyH * (b / 7.5);
+            const bw = sw * 0.28 * (1 - b / 12);
+            ctx.beginPath(); ctx.moveTo(-bw, by); ctx.lineTo(bw, by); ctx.stroke();
+          }
+          // Gold death mask face
+          const faceR = sw * 0.22;
+          const faceY = -mummyH + faceR * 0.6;
+          const fg = ctx.createRadialGradient(0, faceY, 0, 0, faceY, faceR * 1.4);
+          fg.addColorStop(0, "#e8c870");
+          fg.addColorStop(0.6, "#c8a850");
+          fg.addColorStop(1, "#a08030");
+          ctx.fillStyle = fg;
+          ctx.beginPath();
+          ctx.ellipse(0, faceY, faceR * 0.75, faceR, 0, 0, Math.PI * 2);
+          ctx.fill();
+          // Nemes stripe
+          ctx.strokeStyle = "rgba(30,15,5,0.5)";
+          ctx.lineWidth = 0.8;
+          for (let s = 0; s < 4; s++) {
+            ctx.beginPath();
+            ctx.moveTo(-faceR * 0.8, faceY - faceR * 0.3 + s * faceR * 0.2);
+            ctx.lineTo(faceR * 0.8, faceY - faceR * 0.3 + s * faceR * 0.2);
+            ctx.stroke();
+          }
+          // Eyes — dark kohl lines
+          ctx.fillStyle = "#1a0e04";
+          ctx.fillRect(-faceR * 0.42, faceY - faceR * 0.12, faceR * 0.3, faceR * 0.12);
+          ctx.fillRect(faceR * 0.12, faceY - faceR * 0.12, faceR * 0.3, faceR * 0.12);
+          // Uraeus (cobra) on forehead
+          ctx.fillStyle = "#c03020";
+          ctx.beginPath();
+          ctx.arc(0, faceY - faceR * 0.65, faceR * 0.12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // ── LID (slides sideways when opened) ─────────────────────
+        const lidX = obj.x - sarcophagusLidOffset;
+        // Lid body — more ornate than the box
+        const lidG = ctx.createLinearGradient(lidX, obj.y, lidX + sw, obj.y + sh);
+        lidG.addColorStop(0,   "#b09060");
+        lidG.addColorStop(0.25,"#d4b070");
+        lidG.addColorStop(0.5, "#e8c878");
+        lidG.addColorStop(0.75,"#c8a858");
+        lidG.addColorStop(1,   "#907040");
+        ctx.fillStyle = lidG;
+        ctx.beginPath();
+        ctx.moveTo(lidX,        obj.y + 3);
+        ctx.lineTo(lidX + sw,   obj.y + 5);
+        ctx.lineTo(lidX + sw,   obj.y + sh - 5);
+        ctx.lineTo(lidX,        obj.y + sh - 3);
+        ctx.closePath();
+        ctx.fill();
+
+        // Raised center ridge
+        ctx.fillStyle = "rgba(255,230,140,0.25)";
+        ctx.fillRect(lidX + sw * 0.28, obj.y + 2, sw * 0.44, sh - 4);
+
+        // Face mask on lid
+        const lidCx = lidX + sw * 0.25;
+        const lidCy = obj.y + sh / 2;
+        // Oval face
+        ctx.fillStyle = "#ddc070";
+        ctx.beginPath();
+        ctx.ellipse(lidCx, lidCy, sw * 0.12, sh * 0.38, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Kohl eyes
+        ctx.fillStyle = "#1a0e04";
+        ctx.beginPath(); ctx.ellipse(lidCx - sw*0.05, lidCy - sh*0.06, sw*0.035, sh*0.055, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(lidCx + sw*0.05, lidCy - sh*0.06, sw*0.035, sh*0.055, 0, 0, Math.PI*2); ctx.fill();
+        // Eye liner
+        ctx.strokeStyle = "#1a0e04"; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(lidCx - sw*0.1, lidCy - sh*0.06); ctx.lineTo(lidCx - sw*0.04, lidCy - sh*0.06); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(lidCx + sw*0.04, lidCy - sh*0.06); ctx.lineTo(lidCx + sw*0.1, lidCy - sh*0.06); ctx.stroke();
+        // Nose + mouth
+        ctx.fillStyle = "#b89050";
+        ctx.beginPath(); ctx.ellipse(lidCx, lidCy + sh*0.04, sw*0.02, sh*0.025, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = "#8a6830"; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(lidCx - sw*0.04, lidCy + sh*0.13); ctx.quadraticCurveTo(lidCx, lidCy + sh*0.16, lidCx + sw*0.04, lidCy + sh*0.13); ctx.stroke();
+        // Nemes headdress stripes
+        ctx.strokeStyle = "rgba(80,60,20,0.4)"; ctx.lineWidth = 0.7;
+        for (let ns = 0; ns < 5; ns++) {
+          const ny = lidCy - sh*0.35 + ns * sh*0.08;
+          ctx.beginPath(); ctx.moveTo(lidCx - sw*0.12, ny); ctx.lineTo(lidCx + sw*0.12, ny); ctx.stroke();
+        }
+        // Cartouche band down center of lid
+        ctx.fillStyle = "rgba(194,168,107,0.15)";
+        ctx.fillRect(lidX + sw*0.42, obj.y + 4, sw*0.2, sh - 8);
+        ctx.strokeStyle = "rgba(194,168,107,0.25)"; ctx.lineWidth = 0.8;
+        ctx.strokeRect(lidX + sw*0.42, obj.y + 4, sw*0.2, sh - 8);
+        // Glyphs on lid cartouche
+        ctx.fillStyle = "rgba(194,168,107,0.5)";
+        ctx.font = "7px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        for (let gi = 0; gi < 3; gi++) {
+          ctx.fillText(["𓄿","𓈖","𓊪"][gi], lidX + sw*0.52, obj.y + 10 + gi*8);
+        }
+        // Lid border
+        ctx.strokeStyle = isNear ? "#f9d342" : "#c8a840"; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(lidX,      obj.y + 3);
+        ctx.lineTo(lidX + sw, obj.y + 5);
+        ctx.lineTo(lidX + sw, obj.y + sh - 5);
+        ctx.lineTo(lidX,      obj.y + sh - 3);
+        ctx.closePath(); ctx.stroke();
         // Glow if near
         if (isNear) {
-          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 12;
-          ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 14;
+          ctx.strokeStyle = "#f9d342";
+          ctx.stroke();
           ctx.shadowBlur = 0;
         }
         break;
       }
 
       case "ushabti": {
+        // Egyptian god-headed figurines
         const ux = obj.x + obj.w / 2;
         const uy = obj.y + obj.h;
+        const god = obj.god || "generic";
+
         // Shadow
         ctx.fillStyle = "rgba(0,0,0,0.3)";
         ctx.beginPath();
-        ctx.ellipse(ux + 1, uy + 2, obj.w / 1.6, 3, 0, 0, Math.PI * 2);
+        ctx.ellipse(ux + 1, uy + 2, obj.w / 1.4, 3, 0, 0, Math.PI * 2);
         ctx.fill();
-        // Body mummy wrap gradient
-        const ubg = ctx.createLinearGradient(obj.x, obj.y, obj.x + obj.w, obj.y);
-        ubg.addColorStop(0, "#505055"); ubg.addColorStop(0.5, isNear ? "#8888aa" : "#686870"); ubg.addColorStop(1, "#505055");
-        ctx.fillStyle = ubg;
-        // Tapered mummy form
+
+        // Body — faience blue/green glaze with mummiform wrapping
+        const bodyG = ctx.createLinearGradient(obj.x, obj.y + 8, obj.x + obj.w, obj.y + 8);
+        const baseCol = { anubis:"#3a4855", thoth:"#2a5548", horus:"#2a4838", osiris:"#1a4030",
+                          sekhmet:"#5a3028", hathor:"#5a3048", ra:"#5a4010", sobek:"#2a4820",
+                          nephthys:"#3a3858", ptah:"#203858", generic:"#404858" }[god] || "#404858";
+        const hiCol  = { anubis:"#607a90", thoth:"#4a8870", horus:"#4a7860", osiris:"#3a7060",
+                          sekhmet:"#906050", hathor:"#906070", ra:"#907030", sobek:"#4a7840",
+                          nephthys:"#606888", ptah:"#506888", generic:"#607080" }[god] || "#607080";
+        bodyG.addColorStop(0, baseCol);
+        bodyG.addColorStop(0.45, hiCol);
+        bodyG.addColorStop(1, baseCol);
+        ctx.fillStyle = bodyG;
+        // Mummiform shape — slightly tapered
         ctx.beginPath();
-        ctx.moveTo(ux - obj.w/2, uy);
-        ctx.lineTo(ux - obj.w/3, obj.y + 8);
-        ctx.lineTo(ux - obj.w/4, obj.y);
-        ctx.lineTo(ux + obj.w/4, obj.y);
-        ctx.lineTo(ux + obj.w/3, obj.y + 8);
-        ctx.lineTo(ux + obj.w/2, uy);
+        ctx.moveTo(ux - obj.w*0.48, uy);
+        ctx.lineTo(ux - obj.w*0.32, obj.y + 10);
+        ctx.lineTo(ux - obj.w*0.2,  obj.y + 2);
+        ctx.lineTo(ux + obj.w*0.2,  obj.y + 2);
+        ctx.lineTo(ux + obj.w*0.32, obj.y + 10);
+        ctx.lineTo(ux + obj.w*0.48, uy);
         ctx.closePath();
         ctx.fill();
+
         // Wrap lines
-        ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(20,30,40,0.35)"; ctx.lineWidth = 0.8;
         for (let i = 1; i < 5; i++) {
-          const ly = obj.y + i * (obj.h / 5.5);
-          const lw = (obj.w / 2) * (1 - i / 8);
+          const ly = obj.y + 10 + i * (obj.h * 0.16);
+          const lw = obj.w * 0.42 * (1 - i * 0.06);
           ctx.beginPath(); ctx.moveTo(ux - lw, ly); ctx.lineTo(ux + lw, ly); ctx.stroke();
         }
-        // Head
-        const hcg = ctx.createRadialGradient(ux, obj.y + 5, 0, ux, obj.y + 5, obj.w * 0.7);
-        hcg.addColorStop(0, isNear ? "#a0a0c0" : "#888898");
-        hcg.addColorStop(1, "#404048");
-        ctx.fillStyle = hcg;
+
+        // Crossed arms — painted gold bands
+        ctx.strokeStyle = "rgba(194,168,107,0.45)"; ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.ellipse(ux, obj.y + 5, obj.w / 1.6, obj.w * 0.72, 0, 0, Math.PI * 2);
-        ctx.fill();
-        // Eyes
-        ctx.fillStyle = "#c2a86b";
-        ctx.beginPath(); ctx.ellipse(ux - 3, obj.y + 5, 2, 1.5, 0, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(ux + 3, obj.y + 5, 2, 1.5, 0, 0, Math.PI*2); ctx.fill();
-        // Nemes headdress lines
-        ctx.strokeStyle = "rgba(80,70,60,0.5)"; ctx.lineWidth = 0.8;
-        ctx.beginPath(); ctx.moveTo(ux - obj.w/1.6, obj.y + 5); ctx.lineTo(ux - obj.w/3, obj.y + 12); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(ux + obj.w/1.6, obj.y + 5); ctx.lineTo(ux + obj.w/3, obj.y + 12); ctx.stroke();
-        // Hieroglyph on body
-        ctx.fillStyle = "rgba(194,168,107,0.55)";
-        ctx.font = `${obj.h * 0.28}px serif`;
+        ctx.moveTo(ux - obj.w*0.3, obj.y + 14);
+        ctx.lineTo(ux + obj.w*0.05, obj.y + 20);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(ux + obj.w*0.3, obj.y + 14);
+        ctx.lineTo(ux - obj.w*0.05, obj.y + 20);
+        ctx.stroke();
+
+        // Hieroglyph on chest (god-specific)
+        const godGlyph = { anubis:"𓀭", thoth:"𓁶", horus:"𓅃", osiris:"𓀦",
+                           sekhmet:"𓁐", hathor:"𓁡", ra:"𓇳", sobek:"𓆈",
+                           nephthys:"𓁢", ptah:"𓀠", generic:"𓁹" }[god] || "𓁹";
+        ctx.fillStyle = isNear ? "rgba(249,211,66,0.8)" : "rgba(194,168,107,0.6)";
+        ctx.font = `${obj.h * 0.26}px serif`;
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText("𓁹", ux, obj.y + obj.h * 0.6);
+        ctx.fillText(godGlyph, ux, obj.y + obj.h * 0.58);
+
+        // ── GOD HEAD ─────────────────────────────────────────────
+        const hcx = ux;
+        const hcy = obj.y + 3;
+        const hr  = obj.w * 0.55;
+
+        if (god === "anubis") {
+          // Jackal head — tall pointed ears, long snout
+          ctx.fillStyle = "#1a1510";
+          // Snout
+          ctx.beginPath();
+          ctx.moveTo(hcx - hr*0.3, hcy + hr*0.2);
+          ctx.lineTo(hcx - hr*0.5, hcy + hr*0.6);
+          ctx.lineTo(hcx + hr*0.5, hcy + hr*0.6);
+          ctx.lineTo(hcx + hr*0.3, hcy + hr*0.2);
+          ctx.closePath(); ctx.fill();
+          // Head
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.65, hr*0.55, 0, 0, Math.PI*2); ctx.fill();
+          // Tall pointed ears
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.4, hcy-hr*0.3); ctx.lineTo(hcx-hr*0.6, hcy-hr*1.1); ctx.lineTo(hcx-hr*0.15, hcy-hr*0.3); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.4, hcy-hr*0.3); ctx.lineTo(hcx+hr*0.6, hcy-hr*1.1); ctx.lineTo(hcx+hr*0.15, hcy-hr*0.3); ctx.fill();
+          // Inner ear
+          ctx.fillStyle = "#4a2018";
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.38, hcy-hr*0.35); ctx.lineTo(hcx-hr*0.52, hcy-hr*0.95); ctx.lineTo(hcx-hr*0.22, hcy-hr*0.35); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.38, hcy-hr*0.35); ctx.lineTo(hcx+hr*0.52, hcy-hr*0.95); ctx.lineTo(hcx+hr*0.22, hcy-hr*0.35); ctx.fill();
+          // Gold collar
+          ctx.fillStyle = "rgba(194,168,107,0.6)";
+          ctx.fillRect(hcx - hr*0.5, hcy + hr*0.55, hr, hr*0.2);
+          // Eyes — gold
+          ctx.fillStyle = "#c8a030";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy+hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy+hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "thoth") {
+          // Ibis head — long curved beak
+          ctx.fillStyle = "#e8e0d0";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.6, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Long curved beak
+          ctx.fillStyle = "#c0780a";
+          ctx.beginPath();
+          ctx.moveTo(hcx - hr*0.25, hcy + hr*0.1);
+          ctx.quadraticCurveTo(hcx - hr*0.9, hcy + hr*0.3, hcx - hr*1.1, hcy + hr*0.9);
+          ctx.lineTo(hcx - hr*0.95, hcy + hr*0.92);
+          ctx.quadraticCurveTo(hcx - hr*0.75, hcy + hr*0.35, hcx - hr*0.1, hcy + hr*0.22);
+          ctx.closePath(); ctx.fill();
+          // Crest
+          ctx.fillStyle = "#ddd8c8";
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.1, hcy-hr*0.4); ctx.lineTo(hcx+hr*0.4, hcy-hr*1.0); ctx.lineTo(hcx+hr*0.55, hcy-hr*0.35); ctx.fill();
+          // Eye
+          ctx.fillStyle = "#1a1510";
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.05, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#c8a030";
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.05, hr*0.05, hr*0.04, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "horus") {
+          // Falcon head
+          ctx.fillStyle = "#4a3820";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.62, hr*0.52, 0, 0, Math.PI*2); ctx.fill();
+          // Hooked beak
+          ctx.fillStyle = "#d08020";
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.1, hcy+hr*0.2); ctx.lineTo(hcx-hr*0.55, hcy+hr*0.55); ctx.lineTo(hcx-hr*0.35, hcy+hr*0.58); ctx.lineTo(hcx+hr*0.1, hcy+hr*0.28); ctx.fill();
+          // Eye stripe
+          ctx.fillStyle = "#1a1510";
+          ctx.fillRect(hcx-hr*0.38, hcy-hr*0.1, hr*0.3, hr*0.12);
+          ctx.fillStyle = "rgba(194,168,107,0.7)";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy-hr*0.04, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          // Feather markings
+          ctx.strokeStyle = "rgba(80,55,20,0.35)"; ctx.lineWidth = 0.6;
+          for (let f = 0; f < 3; f++) {
+            ctx.beginPath(); ctx.moveTo(hcx+hr*(0.1+f*0.12), hcy-hr*0.4); ctx.lineTo(hcx+hr*(0.2+f*0.12), hcy+hr*0.2); ctx.stroke();
+          }
+
+        } else if (god === "osiris") {
+          // Green-skinned, atef crown (tall white crown with feathers)
+          ctx.fillStyle = "#3a6040";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.6, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Atef crown — white tall cylinder
+          ctx.fillStyle = "#e0dcd0";
+          ctx.fillRect(hcx - hr*0.28, hcy - hr*1.2, hr*0.56, hr*1.0);
+          ctx.beginPath(); ctx.ellipse(hcx, hcy-hr*1.2, hr*0.28, hr*0.12, 0, 0, Math.PI*2); ctx.fill();
+          // Side plumes
+          ctx.fillStyle = "#c8b840";
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.28, hcy-hr*0.4); ctx.lineTo(hcx-hr*0.55, hcy-hr*1.1); ctx.lineTo(hcx-hr*0.28, hcy-hr*1.1); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.28, hcy-hr*0.4); ctx.lineTo(hcx+hr*0.55, hcy-hr*1.1); ctx.lineTo(hcx+hr*0.28, hcy-hr*1.1); ctx.fill();
+          // Beard
+          ctx.fillStyle = "#c8a030";
+          ctx.fillRect(hcx-hr*0.1, hcy+hr*0.45, hr*0.2, hr*0.5);
+          // Eyes
+          ctx.fillStyle = "#1a1510";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "sekhmet") {
+          // Lioness head
+          ctx.fillStyle = "#c88040";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.7, hr*0.65, 0, 0, Math.PI*2); ctx.fill();
+          // Mane hints
+          ctx.fillStyle = "#a06030";
+          for (let m = 0; m < 6; m++) {
+            const ang = (m/6)*Math.PI*2;
+            ctx.beginPath(); ctx.arc(hcx + Math.cos(ang)*hr*0.62, hcy + Math.sin(ang)*hr*0.55, hr*0.18, 0, Math.PI*2); ctx.fill();
+          }
+          // Face overlay
+          ctx.fillStyle = "#d89050";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.52, hr*0.48, 0, 0, Math.PI*2); ctx.fill();
+          // Round ears
+          ctx.fillStyle = "#c88040";
+          ctx.beginPath(); ctx.arc(hcx-hr*0.5, hcy-hr*0.4, hr*0.18, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(hcx+hr*0.5, hcy-hr*0.4, hr*0.18, 0, Math.PI*2); ctx.fill();
+          // Sun disk
+          ctx.fillStyle = "#e8b030";
+          ctx.beginPath(); ctx.arc(hcx, hcy-hr*0.8, hr*0.22, 0, Math.PI*2); ctx.fill();
+          // Eyes — fierce
+          ctx.fillStyle = "#1a0a04";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy-hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy-hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "hathor") {
+          // Cow horns with sun disk
+          ctx.fillStyle = "#e8c880";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy+hr*0.1, hr*0.6, hr*0.52, 0, 0, Math.PI*2); ctx.fill();
+          // Cow horns (curved)
+          ctx.strokeStyle = "#d0a840"; ctx.lineWidth = hr*0.18; ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.5, hcy-hr*0.1); ctx.quadraticCurveTo(hcx-hr*0.9, hcy-hr*0.8, hcx-hr*0.5, hcy-hr*1.1); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.5, hcy-hr*0.1); ctx.quadraticCurveTo(hcx+hr*0.9, hcy-hr*0.8, hcx+hr*0.5, hcy-hr*1.1); ctx.stroke();
+          ctx.lineCap = "butt";
+          // Sun disk between horns
+          ctx.fillStyle = "#e83020";
+          ctx.beginPath(); ctx.arc(hcx, hcy-hr*0.9, hr*0.25, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = "#e8b030"; ctx.lineWidth = hr*0.08;
+          ctx.beginPath(); ctx.arc(hcx, hcy-hr*0.9, hr*0.32, 0, Math.PI*2); ctx.stroke();
+          // Eyes
+          ctx.fillStyle = "#1a1510";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy+hr*0.1, hr*0.1, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy+hr*0.1, hr*0.1, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "ra") {
+          // Solar disk head
+          ctx.fillStyle = "#e8b020";
+          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.65, 0, Math.PI*2); ctx.fill();
+          // Rays
+          ctx.strokeStyle = "#f0c030"; ctx.lineWidth = hr*0.08;
+          for (let r = 0; r < 8; r++) {
+            const ang = (r/8)*Math.PI*2;
+            ctx.beginPath();
+            ctx.moveTo(hcx + Math.cos(ang)*hr*0.65, hcy + Math.sin(ang)*hr*0.65);
+            ctx.lineTo(hcx + Math.cos(ang)*hr*1.0, hcy + Math.sin(ang)*hr*1.0);
+            ctx.stroke();
+          }
+          // Inner disk
+          ctx.fillStyle = "#f8d040";
+          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.42, 0, Math.PI*2); ctx.fill();
+          // Eye
+          ctx.fillStyle = "#1a1510";
+          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.16, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#f0c030";
+          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.08, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "sobek") {
+          // Crocodile head — long snout
+          ctx.fillStyle = "#4a7830";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.65, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Snout
+          ctx.beginPath();
+          ctx.moveTo(hcx - hr*0.55, hcy + hr*0.1);
+          ctx.lineTo(hcx - hr*1.1, hcy + hr*0.5);
+          ctx.lineTo(hcx - hr*1.1, hcy + hr*0.7);
+          ctx.lineTo(hcx - hr*0.55, hcy + hr*0.42);
+          ctx.closePath(); ctx.fill();
+          // Teeth
+          ctx.fillStyle = "#e8e0c8";
+          for (let t = 0; t < 4; t++) {
+            ctx.beginPath(); ctx.moveTo(hcx - hr*(0.62 + t*0.12), hcy + hr*0.1); ctx.lineTo(hcx - hr*(0.68 + t*0.12), hcy + hr*0.22); ctx.lineTo(hcx - hr*(0.56 + t*0.12), hcy + hr*0.22); ctx.fill();
+          }
+          // Eyes on top of head
+          ctx.fillStyle = "#d09010";
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.3, hr*0.15, hr*0.11, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#1a1510";
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.3, hr*0.07, hr*0.06, 0, 0, Math.PI*2); ctx.fill();
+          // Scales texture
+          ctx.strokeStyle = "rgba(30,60,10,0.35)"; ctx.lineWidth = 0.5;
+          for (let s = 0; s < 3; s++) { ctx.beginPath(); ctx.arc(hcx+hr*(0.1+s*0.18), hcy, hr*0.14, 0, Math.PI); ctx.stroke(); }
+
+        } else if (god === "nephthys") {
+          // Winged woman — wings raised behind head
+          ctx.fillStyle = "#5855a0";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.58, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Wings
+          ctx.fillStyle = "rgba(100,95,180,0.6)";
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.5, hcy); ctx.quadraticCurveTo(hcx-hr*1.2, hcy-hr*0.6, hcx-hr*0.8, hcy-hr*1.2); ctx.quadraticCurveTo(hcx-hr*0.3, hcy-hr*0.5, hcx, hcy); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.5, hcy); ctx.quadraticCurveTo(hcx+hr*1.2, hcy-hr*0.6, hcx+hr*0.8, hcy-hr*1.2); ctx.quadraticCurveTo(hcx+hr*0.3, hcy-hr*0.5, hcx, hcy); ctx.fill();
+          // Face overlay
+          ctx.fillStyle = "#a8a0e0";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.42, hr*0.38, 0, 0, Math.PI*2); ctx.fill();
+          // Headdress glyph
+          ctx.fillStyle = "#e8c830";
+          ctx.font = `${hr * 0.8}px serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText("𓄤", hcx, hcy - hr*1.0);
+          // Eyes
+          ctx.fillStyle = "#1a1540";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.18, hcy-hr*0.05, hr*0.09, hr*0.07, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.18, hcy-hr*0.05, hr*0.09, hr*0.07, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "ptah") {
+          // Mummiform Ptah — blue skin, close-fitting cap
+          ctx.fillStyle = "#2848a8";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.56, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Cap (no hair, tight fitting)
+          ctx.fillStyle = "#1830a0";
+          ctx.beginPath(); ctx.arc(hcx, hcy - hr*0.05, hr*0.56, Math.PI, 0); ctx.fill();
+          // Beard
+          ctx.fillStyle = "#1838a8";
+          ctx.fillRect(hcx-hr*0.12, hcy+hr*0.42, hr*0.24, hr*0.55);
+          // Was sceptre hint (thin vertical)
+          ctx.strokeStyle = "#c8a030"; ctx.lineWidth = hr*0.12;
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.7, hcy-hr*0.3); ctx.lineTo(hcx+hr*0.7, hcy+hr*0.6); ctx.stroke();
+          // Eyes
+          ctx.fillStyle = "#e8e0d0";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.2, hcy+hr*0.05, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.2, hcy+hr*0.05, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#1a1540";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.2, hcy+hr*0.05, hr*0.05, hr*0.04, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.2, hcy+hr*0.05, hr*0.05, hr*0.04, 0, 0, Math.PI*2); ctx.fill();
+
+        } else {
+          // Generic — plain circular head
+          ctx.fillStyle = "#888898";
+          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.6, 0, Math.PI*2); ctx.fill();
+        }
+
+        // Base plinth
+        ctx.fillStyle = isNear ? "rgba(194,168,107,0.35)" : "rgba(100,85,60,0.5)";
+        ctx.fillRect(obj.x - 2, uy - 2, obj.w + 4, 5);
+
         // Glow if near
         if (isNear) {
           ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 1.5;
+          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 10;
           ctx.beginPath();
-          ctx.moveTo(ux - obj.w/2, uy);
-          ctx.lineTo(ux - obj.w/3, obj.y + 8);
-          ctx.lineTo(ux - obj.w/4, obj.y);
-          ctx.lineTo(ux + obj.w/4, obj.y);
-          ctx.lineTo(ux + obj.w/3, obj.y + 8);
-          ctx.lineTo(ux + obj.w/2, uy);
+          ctx.moveTo(ux - obj.w*0.48, uy);
+          ctx.lineTo(ux - obj.w*0.32, obj.y + 10);
+          ctx.lineTo(ux - obj.w*0.2,  obj.y + 2);
+          ctx.lineTo(ux + obj.w*0.2,  obj.y + 2);
+          ctx.lineTo(ux + obj.w*0.32, obj.y + 10);
+          ctx.lineTo(ux + obj.w*0.48, uy);
           ctx.closePath(); ctx.stroke();
+          ctx.shadowBlur = 0;
         }
         break;
       }
@@ -1044,6 +1544,60 @@ function drawObjects() {
         if (isNear) {
           ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 2;
           ctx.strokeRect(dx, dy, obj.w, obj.h);
+        }
+        break;
+      }
+
+      case "heart-scarab": {
+        // Green jasper scarab beetle
+        const scx = obj.x + obj.w / 2;
+        const scy = obj.y + obj.h / 2;
+        // Shadow
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.beginPath(); ctx.ellipse(scx + 1, scy + 2, obj.w * 0.6, obj.h * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+        // Body
+        const sbg = ctx.createRadialGradient(scx - obj.w*0.1, scy - obj.h*0.1, 0, scx, scy, obj.w * 0.7);
+        sbg.addColorStop(0, "#5ad880");
+        sbg.addColorStop(0.4, "#2a9850");
+        sbg.addColorStop(1, "#156030");
+        ctx.fillStyle = sbg;
+        ctx.beginPath(); ctx.ellipse(scx, scy, obj.w * 0.5, obj.h * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+        // Wings spread wide
+        ctx.fillStyle = "rgba(50,180,90,0.7)";
+        ctx.beginPath();
+        ctx.moveTo(scx - obj.w*0.5, scy);
+        ctx.quadraticCurveTo(scx - obj.w*1.1, scy - obj.h*0.5, scx - obj.w*0.9, scy - obj.h*0.8);
+        ctx.quadraticCurveTo(scx - obj.w*0.4, scy - obj.h*0.5, scx, scy);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(scx + obj.w*0.5, scy);
+        ctx.quadraticCurveTo(scx + obj.w*1.1, scy - obj.h*0.5, scx + obj.w*0.9, scy - obj.h*0.8);
+        ctx.quadraticCurveTo(scx + obj.w*0.4, scy - obj.h*0.5, scx, scy);
+        ctx.fill();
+        // Wing veins
+        ctx.strokeStyle = "rgba(20,100,40,0.5)"; ctx.lineWidth = 0.7;
+        for (let v = 1; v < 4; v++) {
+          ctx.beginPath();
+          ctx.moveTo(scx - obj.w*0.5, scy);
+          ctx.quadraticCurveTo(scx - obj.w*(0.5+v*0.1), scy - obj.h*(0.2+v*0.12), scx - obj.w*(0.3+v*0.18), scy - obj.h*0.7);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(scx + obj.w*0.5, scy);
+          ctx.quadraticCurveTo(scx + obj.w*(0.5+v*0.1), scy - obj.h*(0.2+v*0.12), scx + obj.w*(0.3+v*0.18), scy - obj.h*0.7);
+          ctx.stroke();
+        }
+        // Head with antennae
+        ctx.fillStyle = "#1a7038";
+        ctx.beginPath(); ctx.arc(scx, scy - obj.h*0.42, obj.w * 0.22, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#1a7038"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(scx - obj.w*0.15, scy - obj.h*0.55); ctx.lineTo(scx - obj.w*0.3, scy - obj.h*0.9); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(scx + obj.w*0.15, scy - obj.h*0.55); ctx.lineTo(scx + obj.w*0.3, scy - obj.h*0.9); ctx.stroke();
+        // Glow
+        if (isNear) {
+          ctx.shadowColor = "#50f090"; ctx.shadowBlur = 16;
+          ctx.strokeStyle = "#80f0a0"; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.ellipse(scx, scy, obj.w * 0.5, obj.h * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
+          ctx.shadowBlur = 0;
         }
         break;
       }
@@ -1194,7 +1748,7 @@ function drawObjects() {
         ctx.stroke();
         // If mounted, show flame
         if (obj.mounted) {
-          const bpulse = 0.8 + Math.sin(gameTime * 7) * 0.2;
+          const bpulse = 0.85 + Math.sin(gameTime * 1.5) * 0.15;
           ctx.fillStyle = `rgba(255,180,50,${0.7 * bpulse})`;
           ctx.beginPath();
           ctx.arc(obj.x + obj.w + 10, obj.y + 3, 6 * bpulse, 0, Math.PI * 2);
@@ -1519,7 +2073,7 @@ function drawLighting() {
   const lightX = bracket ? bracket.x + bracket.w / 2 : player.x;
   const lightY = bracket ? bracket.y + bracket.h / 2 : player.y;
   const baseRadius = (player.lampOn || useCorridorLight) ? 220 : 65;
-  const pulse = 1 + Math.sin(gameTime * 2.5) * 0.1;
+  const pulse = 1 + Math.sin(gameTime * 0.7) * 0.06; // slow gentle breathe
   const radius = baseRadius * pulse;
   const ambient = (player.lampOn || useCorridorLight) ? 0.38 : 0.62;
 
@@ -1617,9 +2171,12 @@ function loop() {
   updateCamera();
   checkProximity();
   updateTorchPhysics();
-  checkDoorTransition();
+  if (!roomFadingOut && !roomFadingIn) checkDoorTransition();
+  checkSarcophagusOpen();
+  updateSarcophagus();
+  updateRoomFade();
 
-  gameTime += 0.03;
+  gameTime += 0.016;
   cameraState.zoom += (cameraState.targetZoom - cameraState.zoom) * 0.1;
 
   applyCameraTransform();
@@ -1627,6 +2184,7 @@ function loop() {
   drawObjects();
   drawPlayer();
   drawLighting();
+  drawRoomFade();
 
   resetTransform();
   updateMapDot();

@@ -180,6 +180,13 @@ const rooms = [
         color: "#e6d7b7",
         pickedUp: false,
         text: "An old scroll of instructions for the next path."
+      },
+      {
+        id: "obj-ushabti-rr", name: "Ushabti of Horus", type: "ushabti",
+        x: 650, y: 320, w: 18, h: 30,
+        god: "horus",
+        text: "A faience figurine — falcon-headed Horus, son of Osiris, lord of the sky.\n\nThe ushabti speaks: \'The scroll holds the key to the eastern passage. Read the tablet, then seek further east through the corridor.\'",
+        inspectDone: false
       }
     ],
     exit: null
@@ -233,6 +240,13 @@ const rooms = [
         color: "#d4b44f",
         pickedUp: false,
         text: "A golden amulet. Place it on the altar."
+      },
+      {
+        id: "obj-ushabti-br", name: "Ushabti of Osiris", type: "ushabti",
+        x: 620, y: 150, w: 18, h: 30,
+        god: "osiris",
+        text: "A faience figurine — green-skinned Osiris, lord of the dead, wearing the atef crown.\n\nThe ushabti intones: \'The amulet of protection belongs on the altar. Lay it down and I shall show you the way east.\'",
+        inspectDone: false
       }
     ],
     exit: null
@@ -333,6 +347,14 @@ const rooms = [
         inspectDone: false
       },
 
+      {
+        id: "obj-ushabti-wh", name: "Ushabti of Sekhmet", type: "ushabti",
+        x: 150, y: 320, w: 18, h: 30,
+        god: "sekhmet",
+        text: "A faience figurine — lioness-headed Sekhmet, goddess of war and healing.\n\nThe ushabti growls softly: \'The four sons of Horus must be honoured in their proper order. Imsety first, then Hapy, then Duamutef, then Qebehsenuef. Touch each in turn.\'",
+        inspectDone: false
+      },
+
       // ── hidden niche (revealed after ritual) ──────────────────────
       {
         id: "obj-west-niche", name: "Hidden Niche", type: "niche",
@@ -389,11 +411,11 @@ const rooms = [
 
       // ── sealed alcove door (unlocks when all three offerings placed) ──
       createDoor({
-        id: "door-alcove-north", name: "Alcove Door",
+        id: "door-alcove-north", name: "Sealed Alcove",
         x: 360, y: 0, w: 80, h: 30,
         color: "#5a3a20", locked: true,
-        direction: "up", leadsTo: "north-vestibule", pairId: "alcove-fake",
-        text: "A sealed stone alcove. The inscription above reads: 'Feed the three needs of the dead: sustenance, light, and fragrance.'"
+        direction: "up", leadsTo: "inner-sanctum", pairId: "vestibule-sanctum",
+        text: "A sealed stone alcove. The inscription above reads: \'Feed the three needs of the dead: sustenance, light, and fragrance.\'"
       }),
 
       // ── clue: false door inscription ──────────────────────────────
@@ -428,6 +450,14 @@ const rooms = [
         offeringType: "incense",
         filled: false,
         text: "A shallow bowl blackened by centuries of old smoke. It waits for incense."
+      },
+
+      {
+        id: "obj-ushabti-nv", name: "Ushabti of Hathor", type: "ushabti",
+        x: 680, y: 310, w: 18, h: 30,
+        god: "hathor",
+        text: "A faience figurine — cow-horned Hathor, goddess of love and offerings, with a sun disk between her horns.\n\nThe ushabti sings softly: \'Three gifts sustain the dead: bread for the body, oil for the flame, smoke for the gods. Bring each to its bowl, and the sealed alcove shall open.\' The ushabti\'s gaze lifts toward the hidden passage beyond.",
+        inspectDone: false
       },
 
       // ── cedar chest with dried bread ──────────────────────────────
@@ -519,6 +549,14 @@ const rooms = [
         text: "A mosaic of lapis lazuli and carnelian depicting the solar barque crossing the underworld sky. Ra stands at the prow, his head a disk of gold tesserae. The inscription below reads: 'He who is named shall sail. He who is unnamed shall drift.'"
       },
 
+      {
+        id: "obj-ushabti-eg", name: "Ushabti of Ra", type: "ushabti",
+        x: 680, y: 300, w: 18, h: 30,
+        god: "ra",
+        text: "A faience figurine — Ra the sun god, his head a gleaming solar disk ringed in gold.\n\nThe ushabti speaks: \'Two cartouches guard a third name. Find the hidden syllables, speak the name of the erased king, and the gallery shall yield its secret.\'",
+        inspectDone: false
+      },
+
       // ── secret compartment (hidden, revealed after cartouche restored) ─
       {
         id: "obj-gallery-compartment", name: "Secret Compartment", type: "niche",
@@ -593,6 +631,14 @@ const rooms = [
         x: 530, y: 255, w: 80, h: 65,
         color: "#3e3830",
         text: "A large limestone block has fallen from the ceiling. The gap above it is dark and silent."
+      },
+
+      {
+        id: "obj-ushabti-dc", name: "Ushabti of Sobek", type: "ushabti",
+        x: 650, y: 220, w: 18, h: 30,
+        god: "sobek",
+        text: "A faience figurine — Sobek the crocodile god, guardian of dark and watery places.\n\nThe ushabti hisses: \'Darkness hides what light reveals. Mount your torch in the bracket and see what has waited here for centuries.\'",
+        inspectDone: false
       },
 
       // ── three wall paintings: hidden until torch is mounted ────────
@@ -721,6 +767,14 @@ const rooms = [
         text: "An inscription at the room's center:\n\n'We who wait here were not forgotten. We wait still. Four among us watch. Follow their gaze to find what endures.'"
       },
 
+      {
+        id: "obj-ushabti-os", name: "Ushabti of Nephthys", type: "ushabti",
+        x: 400, y: 420, w: 18, h: 30,
+        god: "nephthys",
+        text: "A faience figurine — winged Nephthys, protector of the dead. Her painted wings wrap around her body.\n\nThe ushabti whispers: \'Four watchers guard this place. Inspect each skull — north, south, east, west. All four agree on where the path opens. Follow their gaze.\'",
+        inspectDone: false
+      },
+
       // ── east niche: hidden until all four watcher skulls inspected ─
       {
         id: "obj-ossuary-niche", name: "Wall Niche", type: "niche",
@@ -759,6 +813,97 @@ const rooms = [
         offeringType: "incense",
         pickedUp: false,
         text: "A compressed cone of kyphi incense — resin, honey, myrrh. Meant for the incense bowl in the Vestibule of Offerings."
+      }
+    ],
+    exit: null
+  },
+
+// ------------------------------------------------------------------ //
+  //  INNER SANCTUM  (inner-sanctum) — north of north-vestibule (secret)
+  //
+  //  Accessed only after filling all three offering bowls in the
+  //  Vestibule of Offerings. A small, perfectly preserved chamber
+  //  containing the pharaoh\'s private altar and a final revelation.
+  // ------------------------------------------------------------------ //
+  {
+    id:   "inner-sanctum",
+    name: "The Inner Sanctum",
+    type: "room",
+    description: "A tiny chamber, barely larger than a cell. The air is dry and cold — sealed since the burial. Everything here is perfectly preserved.",
+
+    objectives: [
+      { id: "read-sanctum-stele",  label: "Read the offering stele.", done: false },
+      { id: "find-heart-scarab",   label: "Take the Heart Scarab from the altar.", done: false }
+    ],
+
+    objects: [
+      createDoor({
+        id: "door-sanctum-south", name: "Return South",
+        x: 360, y: 468, w: 80, h: 30,
+        color: "#5a3a20", locked: false, openProgress: 1,
+        direction: "down", leadsTo: "north-vestibule", pairId: "vestibule-sanctum",
+        text: "The passage back south to the Vestibule of Offerings."
+      }),
+
+      // ── the private altar ─────────────────────────────────────────
+      {
+        id: "obj-sanctum-altar", name: "Private Altar", type: "decoration",
+        x: 300, y: 160, w: 200, h: 36,
+        color: "#4a3828",
+        text: "A small alabaster altar, its surface still bearing dried flower petals and resin — offerings left at the burial. A name is carved into its face in deep hieroglyphs: AKHENATEN. Below: \'He who is erased cannot be buried. He who is named shall pass into the Field of Reeds.\'"
+      },
+
+      // ── offering stele ────────────────────────────────────────────
+      {
+        id: "obj-sanctum-stele", name: "Offering Stele", type: "decoration",
+        x: 200, y: 80, w: 60, h: 100,
+        color: "#6a5835",
+        text: "A limestone stele painted in vivid colours — reds and yellows undimmed by time in this sealed room. It shows the pharaoh Akhenaten making offerings to the Aten, the sun disk. His elongated face and long fingers are unmistakeable.\n\nBelow the scene, a dedication:\n\'For he who was erased by small men. Truth lives where stone does not. May the Aten weigh your heart and find it light.\'",
+        inspectDone: false
+      },
+
+      // ── offering stele right ──────────────────────────────────────
+      {
+        id: "obj-sanctum-stele-r", name: "Offering Stele", type: "decoration",
+        x: 540, y: 80, w: 60, h: 100,
+        color: "#6a5835",
+        text: "A second stele, its paint flaking at the edges. It shows Akhenaten\'s queen — Nefertiti — shaking a sistrum before the solar disk. The inscription names her: Neferneferuaten Nefertiti.\n\nBeneath: \'She who endures. She who was beautiful. She who is not forgotten.\'",
+        inspectDone: false
+      },
+
+      // ── gold canopic chest ────────────────────────────────────────
+      {
+        id: "obj-gold-chest", name: "Canopic Chest", type: "decoration",
+        x: 330, y: 320, w: 140, h: 60,
+        color: "#8a6825",
+        text: "A gilded chest inlaid with lapis lazuli. Four compartments each hold a small alabaster canopic jar. The lids have been sealed with wax — untouched for three thousand years. This is the heart of the burial."
+      },
+
+      // ── heart scarab — the key collectible ───────────────────────
+      {
+        id: "item-heart-scarab", name: "Heart Scarab", type: "heart-scarab",
+        x: 370, y: 215, w: 20, h: 16,
+        color: "#2a8040",
+        pickedUp: false,
+        text: "A green jasper scarab beetle, wings outstretched. The underside is engraved with spell 30B from the Book of the Dead:\n\'O my heart which I had from my mother, do not stand up against me as a witness. Do not oppose me in the tribunal.\'"
+      },
+
+      // ── ushabti of Ptah (mummiform, creator god) ──────────────────
+      {
+        id: "obj-ushabti-is", name: "Ushabti of Ptah", type: "ushabti",
+        x: 120, y: 280, w: 18, h: 30,
+        god: "ptah",
+        text: "A faience figurine — mummiform Ptah, creator god of Memphis, holding a was-sceptre before him. His skin is vivid blue.\n\nThe ushabti speaks clearly: \'You have fed the dead. You have honoured the gods. Take the Heart Scarab — it is the final offering. The pharaoh can now be weighed.\'",
+        inspectDone: false
+      },
+
+      // ── wall inscription — ambient lore ──────────────────────────
+      {
+        id: "obj-sanctum-wall", name: "Wall Inscription", type: "decoration",
+        x: 90, y: 60, w: 80, h: 360,
+        color: "#3a3020",
+        text: "The entire north wall is covered in text — columns of hieroglyphs from floor to ceiling, perfectly preserved. This is spell 125 from the Book of the Dead: the Declaration of Innocence, spoken before the scales of Anubis.\n\n\'I have not committed sin. I have not committed robbery with violence. I have not stolen. I have not slain men and women. I have not destroyed food supplies. I have not caused pain. I have not committed fornication...\' It continues for forty-two declarations.\n\nIn the margin, a later hand has added: \'Akhenaten said these things. Let the scales judge him, not the priests.\'",
+        inspectDone: false
       }
     ],
     exit: null

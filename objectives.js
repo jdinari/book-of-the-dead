@@ -114,9 +114,14 @@ function inspectObject(obj) {
   showInspectUI(obj);
 
   // --- ushabti ---
-  if (obj.type === "ushabti" && !obj.inspectDone) {
-    obj.inspectDone = true;
-    markObjective("speak-ushabti");
+  if (obj.type === "ushabti") {
+    if (!obj.inspectDone) {
+      obj.inspectDone = true;
+      markObjective("speak-ushabti");
+    }
+    // Always show speech on inspect — player can return for hints
+    const hint = getUshabtiHint();
+    showUshabtiSpeech(hint);
   }
 
   // --- glyph stone ---
@@ -246,8 +251,21 @@ function inspectObject(obj) {
         alcoveDoor.locked = false;
         alcoveDoor.opening = true;
       }
-      ui.textContent = "The three offerings are complete. The sealed alcove above grinds open with a deep resonance.";
+      ui.textContent = "The three offerings are complete. The sealed alcove above grinds open with a deep resonance. A hidden sanctum lies beyond.";
+      showUshabtiSpeech("Hathor smiles. The Inner Sanctum is open. Few have ever stood where you are about to.");
     }
+  }
+
+  // --- heart scarab ---
+  if (obj.type === "heart-scarab" && !obj.pickedUp) {
+    markObjective("find-heart-scarab");
+    ui.textContent = "You take the Heart Scarab. It is warm to the touch despite the cold of the tomb. Spell 30B is inscribed on its base: \'O my heart, do not stand against me.\'";
+  }
+
+  // --- sanctum stele ---
+  if ((obj.type === "decoration" || obj.type === "stele") && obj.id && obj.id.includes("stele") && !obj.inspectDone) {
+    obj.inspectDone = true;
+    markObjective("read-sanctum-stele");
   }
 
   // --- intact cartouche (east-gallery clue) ---
