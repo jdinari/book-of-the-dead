@@ -16,6 +16,9 @@ canvas.height = window.innerHeight;
 window.addEventListener("resize", () => {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+  // Offscreen bg canvas will be recreated next frame (_ensureBgCanvas checks dimensions)
+  if (typeof _invalidateBgCache === "function") _invalidateBgCache();
+  if (typeof _lgCache !== "undefined") _lgCache.key = null;
 });
 
 // =====================
@@ -143,3 +146,4 @@ const MAP_LAYOUT = {
   "deep-corridor":   { x:  2, y:  0 },  // east  of right-room
   "ossuary":         { x:  0, y:  2 },  // south of bottom-room
 };
+

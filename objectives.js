@@ -403,3 +403,4 @@ function mountTorchInBracket(bracket) {
   ui.textContent = "You mount the torch in the bracket. The corridor floods with warm light — and three hidden paintings emerge from the darkness.";
   updateUI();
 }
+

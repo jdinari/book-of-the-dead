@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="description" content="Book of the Dead — a top-down Egyptian tomb exploration puzzle game. Decipher hieroglyphs, complete rituals, and find your way out." />
-  <title>Book of the Dead — Tomb</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Book of the Dead</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@400;700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -16,8 +18,14 @@
   <div id="objective-text"></div>
 </div>
 
-<div id="ui"></div>
+<button id="hint-btn">Ask Ushabti</button>
 
+<div id="ushabti-speech">
+  <div class="speech-speaker">The Ushabti Speaks</div>
+  <div class="speech-text" id="ushabti-speech-text"></div>
+</div>
+
+<div id="ui"></div>
 <div id="map-panel" class="hidden"></div>
 <div id="glyph-panel" class="hidden"></div>
 
@@ -32,21 +40,11 @@
 
 <div id="help-text"></div>
 
-<!--
-  Load order matters:
-  1. state.js    — shared variables, canvas, flags
-  2. rooms.js    — room data + helpers (needs state)
-  3. ui.js       — display functions (needs state + rooms)
-  4. inventory.js — item management (needs state + ui)
-  5. objectives.js — quest logic (needs all above)
-  6. engine.js   — game loop, input, drawing (needs everything)
--->
 <script src="state.js"></script>
 <script src="rooms.js"></script>
 <script src="ui.js"></script>
 <script src="inventory.js"></script>
 <script src="objectives.js"></script>
 <script src="engine.js"></script>
-
 </body>
 </html>

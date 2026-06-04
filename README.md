@@ -63,7 +63,17 @@ python3 -m http.server 8000
 
 ---
 
-## Known Limitations / Future Ideas
+## Performance
+
+The rendering pipeline uses two optimizations to keep the frame rate smooth:
+
+**Offscreen background cache** — `drawTomb()` pre-renders the static room environment (stone grid ~160 rect/stroke calls, glyph frieze ~36 glyphs, columns, wall decorations, ossuary skulls ~200 fillText calls) to an offscreen `<canvas>` once per room transition. Every subsequent frame is a single `drawImage()` blit. The cache is invalidated automatically on room change and on window resize.
+
+**Memoized lighting gradients** — `drawLighting()` creates `RadialGradient` objects (up to 3 per frame previously) only when the player's position changes by more than 2px or the lamp/corridor state changes. Flicker animation is achieved by modulating `globalAlpha` each frame (free) rather than rebuilding gradient objects.
+
+---
+
+
 
 - [ ] Save/load progress (localStorage)
 - [ ] Mobile touch controls

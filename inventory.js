@@ -110,3 +110,4 @@ function consumeRosettaPieces() {
   player.heldItem = inventory[player.inventoryIndex] || null;
   updateUI();
 }
+

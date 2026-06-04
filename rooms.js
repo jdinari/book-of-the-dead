@@ -810,3 +810,4 @@ function getCollidingDoor() {
     obj => obj.type === "door" && isColliding(player, obj)
   );
 }
+
