@@ -3,6 +3,14 @@
 // =====================
 
 // =====================
+// ROOM FADE TRANSITION
+// =====================
+let roomFade = 0;
+let roomFadingOut = false;
+let roomFadingIn  = false;
+let pendingDoor   = null;
+
+// =====================
 // SARCOPHAGUS ANIMATION
 // =====================
 let sarcophagusLidOffset = 0;
@@ -392,7 +400,9 @@ function updateSarcophagus() {
 
 function transitionRoom(door) {
   if (!door || door.locked) return;
-  _doRoomTransition(door);
+  if (roomFadingOut || roomFadingIn) return; // already transitioning
+  pendingDoor = door;
+  roomFadingOut = true;
 }
 
 function _doRoomTransition(door) {
@@ -420,6 +430,29 @@ function _doRoomTransition(door) {
   if (mapVisible) renderMap();
 }
 
+function updateRoomFade() {
+  if (roomFadingOut) {
+    roomFade = Math.min(1, roomFade + 0.07);
+    if (roomFade >= 1 && pendingDoor) {
+      _doRoomTransition(pendingDoor);
+      pendingDoor   = null;
+      roomFadingOut = false;
+      roomFadingIn  = true;
+    }
+  } else if (roomFadingIn) {
+    roomFade = Math.max(0, roomFade - 0.055);
+    if (roomFade <= 0) roomFadingIn = false;
+  }
+}
+
+function drawRoomFade() {
+  if (roomFade <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = `rgba(0,0,0,${roomFade})`;
+  ctx.fillRect(0, 0, world.width, world.height);
+  ctx.restore();
+}
 function updateTorchPhysics() {
   for (const obj of getCurrentObjects()) {
     if (!obj || obj.type !== "torch" || obj.pickedUp) continue;
@@ -875,11 +908,9 @@ function drawFriezeStrip(c, x, y, w, h) {
 // DRAW — OBJECTS (enhanced)
 // =====================
 function drawObjects() {
-  ctx.imageSmoothingEnabled = false; // Keep pixel art crisp
   for (const obj of getCurrentObjects()) {
     if (obj.pickedUp) continue;
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
 
     const isNear = obj === nearObject;
     const pulse  = isNear ? (0.88 + Math.sin(gameTime * 1.2) * 0.12) : 1;
@@ -887,165 +918,537 @@ function drawObjects() {
     switch (obj.type) {
 
       case "sarcophagus": {
-        // Isometric sarcophagus sprite (Zombie Island).
-        // Renders larger than the obj bounds so it has visual presence.
-        // The sprite is 296x217 — display at ~2× the obj width, centred.
-        const dispW = obj.w * 2.4;
-        const dispH = dispW * (217 / 296);
-        const sx = obj.x + obj.w/2 - dispW/2;
-        // Anchor bottom of sprite to obj bottom, offset upward for isometric depth
-        const sy = obj.y + obj.h/2 - dispH * 0.72;
+        const sw = obj.w, sh = obj.h;
+        const cx = obj.x + sw / 2;
 
-        // Shadow ellipse under the sarcophagus
+        // Shadow
         ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.fillRect(obj.x + 5, obj.y + 5, sw, sh);
+
+        // ── SARCOPHAGUS BOX (always present) ──────────────────────
+        // Box body — painted limestone with cartouche panels
+        const boxG = ctx.createLinearGradient(obj.x, obj.y, obj.x + sw, obj.y + sh);
+        boxG.addColorStop(0,   "#5a4830");
+        boxG.addColorStop(0.3, "#7a6040");
+        boxG.addColorStop(0.7, "#6a5438");
+        boxG.addColorStop(1,   "#4a3a22");
+        ctx.fillStyle = boxG;
+        // Slightly tapered — wider at head end (left in top-down view)
         ctx.beginPath();
-        ctx.ellipse(obj.x + obj.w/2 + 4, obj.y + obj.h + 8, dispW*0.42, 8, 0, 0, Math.PI*2);
+        ctx.moveTo(obj.x,       obj.y + 4);
+        ctx.lineTo(obj.x + sw,  obj.y + 6);
+        ctx.lineTo(obj.x + sw,  obj.y + sh - 6);
+        ctx.lineTo(obj.x,       obj.y + sh - 4);
+        ctx.closePath();
         ctx.fill();
 
-        // Pick closed or open sprite based on animation state
-        const useOpen = obj.opened || sarcophagusLidOffset > 20;
-        const sarcImg = useOpen ? sprites.sarc_open : sprites.sarc_closed;
+        // Cartouche panel on body
+        ctx.fillStyle = "rgba(194,168,107,0.12)";
+        ctx.fillRect(obj.x + 24, obj.y + 8, sw - 48, sh - 16);
+        ctx.strokeStyle = "rgba(194,168,107,0.3)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(obj.x + 24, obj.y + 8, sw - 48, sh - 16);
 
-        if (sarcImg && sarcImg.complete && sarcImg.naturalWidth > 0) {
-          ctx.save();
-          if (isNear && !obj.opened) {
-            ctx.shadowColor = "#f9d342";
-            ctx.shadowBlur = 18;
-          }
-          // Gentle lid-open transition: slide sprite slightly upward as lid opens
-          const lidRise = sarcophagusLidOffset > 0 ? -(sarcophagusLidOffset / 60) * 6 : 0;
-          ctx.drawImage(sarcImg, sx, sy + lidRise, dispW, dispH);
-          ctx.shadowBlur = 0;
-          ctx.restore();
-        } else {
-          // Fallback: gold rectangle
-          ctx.fillStyle = "#c8a030";
-          ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-          ctx.strokeStyle = isNear ? "#f9d342" : "#8a6820";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+        // Hieroglyphs on body
+        ctx.fillStyle = "rgba(194,168,107,0.45)";
+        ctx.font = "8px serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const glyphs = ["𓂀","𓄿","𓏏","𓇋","𓁹"];
+        for (let gi = 0; gi < glyphs.length; gi++) {
+          ctx.fillText(glyphs[gi], obj.x + 38 + gi * 10, obj.y + sh / 2);
         }
 
-        // Mummy rises from the sarcophagus when fully open
+        // Foot end ornament
+        ctx.fillStyle = "rgba(194,168,107,0.2)";
+        ctx.fillRect(obj.x + sw - 18, obj.y + 4, 12, sh - 8);
+
+        // ── MUMMY (sits up if opened) ──────────────────────────────
         if (obj.opened && mummySitProgress > 0) {
-          const mRise = mummySitProgress * obj.h * 3.5;
-          const mummyImg = sprites.player_f0 || sprites.mummy;
-          if (mummyImg && mummyImg.complete && mummyImg.naturalWidth > 0) {
-            const mw = dispW * 0.35;
-            const mh = mw * 1.25;
-            ctx.save();
-            ctx.globalAlpha = Math.min(1, mummySitProgress * 2.5);
-            ctx.shadowColor = "rgba(255,200,80,0.7)";
-            ctx.shadowBlur = 16;
-            ctx.drawImage(mummyImg,
-              obj.x + obj.w/2 - mw/2,
-              sy - mRise - mh * 0.3,
-              mw, mh);
-            ctx.shadowBlur = 0;
-            ctx.restore();
+          const sitAngle = (mummySitProgress * Math.PI * 0.45); // 0 → ~80deg lean
+          const mummyH = sh * 2.2;
+          ctx.save();
+          ctx.translate(cx - sw * 0.1, obj.y + sh * 0.5);
+          ctx.rotate(-sitAngle);
+          // Wrapping body
+          const mbg = ctx.createLinearGradient(-sw * 0.3, -mummyH, sw * 0.3, 0);
+          mbg.addColorStop(0, "#d8c898");
+          mbg.addColorStop(0.4, "#c0ac80");
+          mbg.addColorStop(1, "#a09060");
+          ctx.fillStyle = mbg;
+          ctx.beginPath();
+          ctx.moveTo(-sw * 0.28, 0);
+          ctx.lineTo(-sw * 0.18, -mummyH * 0.85);
+          ctx.lineTo(-sw * 0.1,  -mummyH);
+          ctx.lineTo(sw * 0.1,   -mummyH);
+          ctx.lineTo(sw * 0.18,  -mummyH * 0.85);
+          ctx.lineTo(sw * 0.28,  0);
+          ctx.closePath();
+          ctx.fill();
+          // Wrap band lines
+          ctx.strokeStyle = "rgba(160,130,80,0.5)";
+          ctx.lineWidth = 1;
+          for (let b = 1; b < 7; b++) {
+            const by = -mummyH * (b / 7.5);
+            const bw = sw * 0.28 * (1 - b / 12);
+            ctx.beginPath(); ctx.moveTo(-bw, by); ctx.lineTo(bw, by); ctx.stroke();
           }
+          // Gold death mask face
+          const faceR = sw * 0.22;
+          const faceY = -mummyH + faceR * 0.6;
+          const fg = ctx.createRadialGradient(0, faceY, 0, 0, faceY, faceR * 1.4);
+          fg.addColorStop(0, "#e8c870");
+          fg.addColorStop(0.6, "#c8a850");
+          fg.addColorStop(1, "#a08030");
+          ctx.fillStyle = fg;
+          ctx.beginPath();
+          ctx.ellipse(0, faceY, faceR * 0.75, faceR, 0, 0, Math.PI * 2);
+          ctx.fill();
+          // Nemes stripe
+          ctx.strokeStyle = "rgba(30,15,5,0.5)";
+          ctx.lineWidth = 0.8;
+          for (let s = 0; s < 4; s++) {
+            ctx.beginPath();
+            ctx.moveTo(-faceR * 0.8, faceY - faceR * 0.3 + s * faceR * 0.2);
+            ctx.lineTo(faceR * 0.8, faceY - faceR * 0.3 + s * faceR * 0.2);
+            ctx.stroke();
+          }
+          // Eyes — dark kohl lines
+          ctx.fillStyle = "#1a0e04";
+          ctx.fillRect(-faceR * 0.42, faceY - faceR * 0.12, faceR * 0.3, faceR * 0.12);
+          ctx.fillRect(faceR * 0.12, faceY - faceR * 0.12, faceR * 0.3, faceR * 0.12);
+          // Uraeus (cobra) on forehead
+          ctx.fillStyle = "#c03020";
+          ctx.beginPath();
+          ctx.arc(0, faceY - faceR * 0.65, faceR * 0.12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
         }
 
-        // Near glow when not yet opened
-        if (isNear && !obj.opened) {
+        // ── LID (slides sideways when opened) ─────────────────────
+        const lidX = obj.x - sarcophagusLidOffset;
+        // Lid body — more ornate than the box
+        const lidG = ctx.createLinearGradient(lidX, obj.y, lidX + sw, obj.y + sh);
+        lidG.addColorStop(0,   "#b09060");
+        lidG.addColorStop(0.25,"#d4b070");
+        lidG.addColorStop(0.5, "#e8c878");
+        lidG.addColorStop(0.75,"#c8a858");
+        lidG.addColorStop(1,   "#907040");
+        ctx.fillStyle = lidG;
+        ctx.beginPath();
+        ctx.moveTo(lidX,        obj.y + 3);
+        ctx.lineTo(lidX + sw,   obj.y + 5);
+        ctx.lineTo(lidX + sw,   obj.y + sh - 5);
+        ctx.lineTo(lidX,        obj.y + sh - 3);
+        ctx.closePath();
+        ctx.fill();
+
+        // Raised center ridge
+        ctx.fillStyle = "rgba(255,230,140,0.25)";
+        ctx.fillRect(lidX + sw * 0.28, obj.y + 2, sw * 0.44, sh - 4);
+
+        // Face mask on lid
+        const lidCx = lidX + sw * 0.25;
+        const lidCy = obj.y + sh / 2;
+        // Oval face
+        ctx.fillStyle = "#ddc070";
+        ctx.beginPath();
+        ctx.ellipse(lidCx, lidCy, sw * 0.12, sh * 0.38, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Kohl eyes
+        ctx.fillStyle = "#1a0e04";
+        ctx.beginPath(); ctx.ellipse(lidCx - sw*0.05, lidCy - sh*0.06, sw*0.035, sh*0.055, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(lidCx + sw*0.05, lidCy - sh*0.06, sw*0.035, sh*0.055, 0, 0, Math.PI*2); ctx.fill();
+        // Eye liner
+        ctx.strokeStyle = "#1a0e04"; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(lidCx - sw*0.1, lidCy - sh*0.06); ctx.lineTo(lidCx - sw*0.04, lidCy - sh*0.06); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(lidCx + sw*0.04, lidCy - sh*0.06); ctx.lineTo(lidCx + sw*0.1, lidCy - sh*0.06); ctx.stroke();
+        // Nose + mouth
+        ctx.fillStyle = "#b89050";
+        ctx.beginPath(); ctx.ellipse(lidCx, lidCy + sh*0.04, sw*0.02, sh*0.025, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = "#8a6830"; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(lidCx - sw*0.04, lidCy + sh*0.13); ctx.quadraticCurveTo(lidCx, lidCy + sh*0.16, lidCx + sw*0.04, lidCy + sh*0.13); ctx.stroke();
+        // Nemes headdress stripes
+        ctx.strokeStyle = "rgba(80,60,20,0.4)"; ctx.lineWidth = 0.7;
+        for (let ns = 0; ns < 5; ns++) {
+          const ny = lidCy - sh*0.35 + ns * sh*0.08;
+          ctx.beginPath(); ctx.moveTo(lidCx - sw*0.12, ny); ctx.lineTo(lidCx + sw*0.12, ny); ctx.stroke();
+        }
+        // Cartouche band down center of lid
+        ctx.fillStyle = "rgba(194,168,107,0.15)";
+        ctx.fillRect(lidX + sw*0.42, obj.y + 4, sw*0.2, sh - 8);
+        ctx.strokeStyle = "rgba(194,168,107,0.25)"; ctx.lineWidth = 0.8;
+        ctx.strokeRect(lidX + sw*0.42, obj.y + 4, sw*0.2, sh - 8);
+        // Glyphs on lid cartouche
+        ctx.fillStyle = "rgba(194,168,107,0.5)";
+        ctx.font = "7px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        for (let gi = 0; gi < 3; gi++) {
+          ctx.fillText(["𓄿","𓈖","𓊪"][gi], lidX + sw*0.52, obj.y + 10 + gi*8);
+        }
+        // Lid border
+        ctx.strokeStyle = isNear ? "#f9d342" : "#c8a840"; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(lidX,      obj.y + 3);
+        ctx.lineTo(lidX + sw, obj.y + 5);
+        ctx.lineTo(lidX + sw, obj.y + sh - 5);
+        ctx.lineTo(lidX,      obj.y + sh - 3);
+        ctx.closePath(); ctx.stroke();
+        // Glow if near
+        if (isNear) {
+          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 14;
           ctx.strokeStyle = "#f9d342";
-          ctx.lineWidth = 2;
-          ctx.shadowColor = "#f9d342";
-          ctx.shadowBlur = 12;
-          ctx.strokeRect(sx - 2, sy - 2, dispW + 4, dispH + 4);
+          ctx.stroke();
           ctx.shadowBlur = 0;
         }
         break;
       }
 
       case "ushabti": {
-        // Seth/Anubis dark-robed ushabti figure — animated walk idle
-        // 4 frames at 32x56 each. Gently cycles between frames 0-1 (idle sway).
-        const frameIdx = Math.floor(gameTime * 1.2) % 2; // slow idle sway
-        const ushKey = `ushabti_f${frameIdx}`;
-        const ushImg = sprites[ushKey] || sprites.ushabti_f0 || sprites.ushabti;
+        // Egyptian god-headed figurines
+        const ux = obj.x + obj.w / 2;
+        const uy = obj.y + obj.h;
+        const god = obj.god || "generic";
 
-        // Scale: display at obj.w wide, proportional height (native 32x56 → ~1.75 tall)
-        const dispW = obj.w + 6;
-        const dispH = Math.round(dispW * 1.75);
-        const ux = obj.x + obj.w/2 - dispW/2;
-        const uy = obj.y + obj.h - dispH + 4; // anchor to bottom
-
-        // Drop shadow
-        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        // Shadow
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
         ctx.beginPath();
-        ctx.ellipse(obj.x + obj.w/2 + 1, obj.y + obj.h + 2, dispW*0.38, 3, 0, 0, Math.PI*2);
+        ctx.ellipse(ux + 1, uy + 2, obj.w / 1.4, 3, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        if (ushImg && ushImg.complete && ushImg.naturalWidth > 0) {
-          ctx.save();
-          if (isNear) { ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 16; }
-          ctx.drawImage(ushImg, ux, uy, dispW, dispH);
-          ctx.shadowBlur = 0;
-          ctx.restore();
-        } else {
-          // Fallback silhouette
-          ctx.fillStyle = "#3a3858";
-          ctx.fillRect(ux, uy, dispW, dispH);
+        // Body — faience blue/green glaze with mummiform wrapping
+        const bodyG = ctx.createLinearGradient(obj.x, obj.y + 8, obj.x + obj.w, obj.y + 8);
+        const baseCol = { anubis:"#3a4855", thoth:"#2a5548", horus:"#2a4838", osiris:"#1a4030",
+                          sekhmet:"#5a3028", hathor:"#5a3048", ra:"#5a4010", sobek:"#2a4820",
+                          nephthys:"#3a3858", ptah:"#203858", generic:"#404858" }[god] || "#404858";
+        const hiCol  = { anubis:"#607a90", thoth:"#4a8870", horus:"#4a7860", osiris:"#3a7060",
+                          sekhmet:"#906050", hathor:"#906070", ra:"#907030", sobek:"#4a7840",
+                          nephthys:"#606888", ptah:"#506888", generic:"#607080" }[god] || "#607080";
+        bodyG.addColorStop(0, baseCol);
+        bodyG.addColorStop(0.45, hiCol);
+        bodyG.addColorStop(1, baseCol);
+        ctx.fillStyle = bodyG;
+        // Mummiform shape — slightly tapered
+        ctx.beginPath();
+        ctx.moveTo(ux - obj.w*0.48, uy);
+        ctx.lineTo(ux - obj.w*0.32, obj.y + 10);
+        ctx.lineTo(ux - obj.w*0.2,  obj.y + 2);
+        ctx.lineTo(ux + obj.w*0.2,  obj.y + 2);
+        ctx.lineTo(ux + obj.w*0.32, obj.y + 10);
+        ctx.lineTo(ux + obj.w*0.48, uy);
+        ctx.closePath();
+        ctx.fill();
+
+        // Wrap lines
+        ctx.strokeStyle = "rgba(20,30,40,0.35)"; ctx.lineWidth = 0.8;
+        for (let i = 1; i < 5; i++) {
+          const ly = obj.y + 10 + i * (obj.h * 0.16);
+          const lw = obj.w * 0.42 * (1 - i * 0.06);
+          ctx.beginPath(); ctx.moveTo(ux - lw, ly); ctx.lineTo(ux + lw, ly); ctx.stroke();
         }
 
+        // Crossed arms — painted gold bands
+        ctx.strokeStyle = "rgba(194,168,107,0.45)"; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(ux - obj.w*0.3, obj.y + 14);
+        ctx.lineTo(ux + obj.w*0.05, obj.y + 20);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(ux + obj.w*0.3, obj.y + 14);
+        ctx.lineTo(ux - obj.w*0.05, obj.y + 20);
+        ctx.stroke();
+
+        // Hieroglyph on chest (god-specific)
+        const godGlyph = { anubis:"𓀭", thoth:"𓁶", horus:"𓅃", osiris:"𓀦",
+                           sekhmet:"𓁐", hathor:"𓁡", ra:"𓇳", sobek:"𓆈",
+                           nephthys:"𓁢", ptah:"𓀠", generic:"𓁹" }[god] || "𓁹";
+        ctx.fillStyle = isNear ? "rgba(249,211,66,0.8)" : "rgba(194,168,107,0.6)";
+        ctx.font = `${obj.h * 0.26}px serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(godGlyph, ux, obj.y + obj.h * 0.58);
+
+        // ── GOD HEAD ─────────────────────────────────────────────
+        const hcx = ux;
+        const hcy = obj.y + 3;
+        const hr  = obj.w * 0.55;
+
+        if (god === "anubis") {
+          // Jackal head — tall pointed ears, long snout
+          ctx.fillStyle = "#1a1510";
+          // Snout
+          ctx.beginPath();
+          ctx.moveTo(hcx - hr*0.3, hcy + hr*0.2);
+          ctx.lineTo(hcx - hr*0.5, hcy + hr*0.6);
+          ctx.lineTo(hcx + hr*0.5, hcy + hr*0.6);
+          ctx.lineTo(hcx + hr*0.3, hcy + hr*0.2);
+          ctx.closePath(); ctx.fill();
+          // Head
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.65, hr*0.55, 0, 0, Math.PI*2); ctx.fill();
+          // Tall pointed ears
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.4, hcy-hr*0.3); ctx.lineTo(hcx-hr*0.6, hcy-hr*1.1); ctx.lineTo(hcx-hr*0.15, hcy-hr*0.3); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.4, hcy-hr*0.3); ctx.lineTo(hcx+hr*0.6, hcy-hr*1.1); ctx.lineTo(hcx+hr*0.15, hcy-hr*0.3); ctx.fill();
+          // Inner ear
+          ctx.fillStyle = "#4a2018";
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.38, hcy-hr*0.35); ctx.lineTo(hcx-hr*0.52, hcy-hr*0.95); ctx.lineTo(hcx-hr*0.22, hcy-hr*0.35); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.38, hcy-hr*0.35); ctx.lineTo(hcx+hr*0.52, hcy-hr*0.95); ctx.lineTo(hcx+hr*0.22, hcy-hr*0.35); ctx.fill();
+          // Gold collar
+          ctx.fillStyle = "rgba(194,168,107,0.6)";
+          ctx.fillRect(hcx - hr*0.5, hcy + hr*0.55, hr, hr*0.2);
+          // Eyes — gold
+          ctx.fillStyle = "#c8a030";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy+hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy+hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "thoth") {
+          // Ibis head — long curved beak
+          ctx.fillStyle = "#e8e0d0";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.6, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Long curved beak
+          ctx.fillStyle = "#c0780a";
+          ctx.beginPath();
+          ctx.moveTo(hcx - hr*0.25, hcy + hr*0.1);
+          ctx.quadraticCurveTo(hcx - hr*0.9, hcy + hr*0.3, hcx - hr*1.1, hcy + hr*0.9);
+          ctx.lineTo(hcx - hr*0.95, hcy + hr*0.92);
+          ctx.quadraticCurveTo(hcx - hr*0.75, hcy + hr*0.35, hcx - hr*0.1, hcy + hr*0.22);
+          ctx.closePath(); ctx.fill();
+          // Crest
+          ctx.fillStyle = "#ddd8c8";
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.1, hcy-hr*0.4); ctx.lineTo(hcx+hr*0.4, hcy-hr*1.0); ctx.lineTo(hcx+hr*0.55, hcy-hr*0.35); ctx.fill();
+          // Eye
+          ctx.fillStyle = "#1a1510";
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.05, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#c8a030";
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.05, hr*0.05, hr*0.04, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "horus") {
+          // Falcon head
+          ctx.fillStyle = "#4a3820";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.62, hr*0.52, 0, 0, Math.PI*2); ctx.fill();
+          // Hooked beak
+          ctx.fillStyle = "#d08020";
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.1, hcy+hr*0.2); ctx.lineTo(hcx-hr*0.55, hcy+hr*0.55); ctx.lineTo(hcx-hr*0.35, hcy+hr*0.58); ctx.lineTo(hcx+hr*0.1, hcy+hr*0.28); ctx.fill();
+          // Eye stripe
+          ctx.fillStyle = "#1a1510";
+          ctx.fillRect(hcx-hr*0.38, hcy-hr*0.1, hr*0.3, hr*0.12);
+          ctx.fillStyle = "rgba(194,168,107,0.7)";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy-hr*0.04, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          // Feather markings
+          ctx.strokeStyle = "rgba(80,55,20,0.35)"; ctx.lineWidth = 0.6;
+          for (let f = 0; f < 3; f++) {
+            ctx.beginPath(); ctx.moveTo(hcx+hr*(0.1+f*0.12), hcy-hr*0.4); ctx.lineTo(hcx+hr*(0.2+f*0.12), hcy+hr*0.2); ctx.stroke();
+          }
+
+        } else if (god === "osiris") {
+          // Green-skinned, atef crown (tall white crown with feathers)
+          ctx.fillStyle = "#3a6040";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.6, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Atef crown — white tall cylinder
+          ctx.fillStyle = "#e0dcd0";
+          ctx.fillRect(hcx - hr*0.28, hcy - hr*1.2, hr*0.56, hr*1.0);
+          ctx.beginPath(); ctx.ellipse(hcx, hcy-hr*1.2, hr*0.28, hr*0.12, 0, 0, Math.PI*2); ctx.fill();
+          // Side plumes
+          ctx.fillStyle = "#c8b840";
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.28, hcy-hr*0.4); ctx.lineTo(hcx-hr*0.55, hcy-hr*1.1); ctx.lineTo(hcx-hr*0.28, hcy-hr*1.1); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.28, hcy-hr*0.4); ctx.lineTo(hcx+hr*0.55, hcy-hr*1.1); ctx.lineTo(hcx+hr*0.28, hcy-hr*1.1); ctx.fill();
+          // Beard
+          ctx.fillStyle = "#c8a030";
+          ctx.fillRect(hcx-hr*0.1, hcy+hr*0.45, hr*0.2, hr*0.5);
+          // Eyes
+          ctx.fillStyle = "#1a1510";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "sekhmet") {
+          // Lioness head
+          ctx.fillStyle = "#c88040";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.7, hr*0.65, 0, 0, Math.PI*2); ctx.fill();
+          // Mane hints
+          ctx.fillStyle = "#a06030";
+          for (let m = 0; m < 6; m++) {
+            const ang = (m/6)*Math.PI*2;
+            ctx.beginPath(); ctx.arc(hcx + Math.cos(ang)*hr*0.62, hcy + Math.sin(ang)*hr*0.55, hr*0.18, 0, Math.PI*2); ctx.fill();
+          }
+          // Face overlay
+          ctx.fillStyle = "#d89050";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.52, hr*0.48, 0, 0, Math.PI*2); ctx.fill();
+          // Round ears
+          ctx.fillStyle = "#c88040";
+          ctx.beginPath(); ctx.arc(hcx-hr*0.5, hcy-hr*0.4, hr*0.18, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(hcx+hr*0.5, hcy-hr*0.4, hr*0.18, 0, Math.PI*2); ctx.fill();
+          // Sun disk
+          ctx.fillStyle = "#e8b030";
+          ctx.beginPath(); ctx.arc(hcx, hcy-hr*0.8, hr*0.22, 0, Math.PI*2); ctx.fill();
+          // Eyes — fierce
+          ctx.fillStyle = "#1a0a04";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy-hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy-hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "hathor") {
+          // Cow horns with sun disk
+          ctx.fillStyle = "#e8c880";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy+hr*0.1, hr*0.6, hr*0.52, 0, 0, Math.PI*2); ctx.fill();
+          // Cow horns (curved)
+          ctx.strokeStyle = "#d0a840"; ctx.lineWidth = hr*0.18; ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.5, hcy-hr*0.1); ctx.quadraticCurveTo(hcx-hr*0.9, hcy-hr*0.8, hcx-hr*0.5, hcy-hr*1.1); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.5, hcy-hr*0.1); ctx.quadraticCurveTo(hcx+hr*0.9, hcy-hr*0.8, hcx+hr*0.5, hcy-hr*1.1); ctx.stroke();
+          ctx.lineCap = "butt";
+          // Sun disk between horns
+          ctx.fillStyle = "#e83020";
+          ctx.beginPath(); ctx.arc(hcx, hcy-hr*0.9, hr*0.25, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = "#e8b030"; ctx.lineWidth = hr*0.08;
+          ctx.beginPath(); ctx.arc(hcx, hcy-hr*0.9, hr*0.32, 0, Math.PI*2); ctx.stroke();
+          // Eyes
+          ctx.fillStyle = "#1a1510";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy+hr*0.1, hr*0.1, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy+hr*0.1, hr*0.1, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "ra") {
+          // Solar disk head
+          ctx.fillStyle = "#e8b020";
+          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.65, 0, Math.PI*2); ctx.fill();
+          // Rays
+          ctx.strokeStyle = "#f0c030"; ctx.lineWidth = hr*0.08;
+          for (let r = 0; r < 8; r++) {
+            const ang = (r/8)*Math.PI*2;
+            ctx.beginPath();
+            ctx.moveTo(hcx + Math.cos(ang)*hr*0.65, hcy + Math.sin(ang)*hr*0.65);
+            ctx.lineTo(hcx + Math.cos(ang)*hr*1.0, hcy + Math.sin(ang)*hr*1.0);
+            ctx.stroke();
+          }
+          // Inner disk
+          ctx.fillStyle = "#f8d040";
+          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.42, 0, Math.PI*2); ctx.fill();
+          // Eye
+          ctx.fillStyle = "#1a1510";
+          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.16, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#f0c030";
+          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.08, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "sobek") {
+          // Crocodile head — long snout
+          ctx.fillStyle = "#4a7830";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.65, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Snout
+          ctx.beginPath();
+          ctx.moveTo(hcx - hr*0.55, hcy + hr*0.1);
+          ctx.lineTo(hcx - hr*1.1, hcy + hr*0.5);
+          ctx.lineTo(hcx - hr*1.1, hcy + hr*0.7);
+          ctx.lineTo(hcx - hr*0.55, hcy + hr*0.42);
+          ctx.closePath(); ctx.fill();
+          // Teeth
+          ctx.fillStyle = "#e8e0c8";
+          for (let t = 0; t < 4; t++) {
+            ctx.beginPath(); ctx.moveTo(hcx - hr*(0.62 + t*0.12), hcy + hr*0.1); ctx.lineTo(hcx - hr*(0.68 + t*0.12), hcy + hr*0.22); ctx.lineTo(hcx - hr*(0.56 + t*0.12), hcy + hr*0.22); ctx.fill();
+          }
+          // Eyes on top of head
+          ctx.fillStyle = "#d09010";
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.3, hr*0.15, hr*0.11, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#1a1510";
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.3, hr*0.07, hr*0.06, 0, 0, Math.PI*2); ctx.fill();
+          // Scales texture
+          ctx.strokeStyle = "rgba(30,60,10,0.35)"; ctx.lineWidth = 0.5;
+          for (let s = 0; s < 3; s++) { ctx.beginPath(); ctx.arc(hcx+hr*(0.1+s*0.18), hcy, hr*0.14, 0, Math.PI); ctx.stroke(); }
+
+        } else if (god === "nephthys") {
+          // Winged woman — wings raised behind head
+          ctx.fillStyle = "#5855a0";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.58, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Wings
+          ctx.fillStyle = "rgba(100,95,180,0.6)";
+          ctx.beginPath(); ctx.moveTo(hcx-hr*0.5, hcy); ctx.quadraticCurveTo(hcx-hr*1.2, hcy-hr*0.6, hcx-hr*0.8, hcy-hr*1.2); ctx.quadraticCurveTo(hcx-hr*0.3, hcy-hr*0.5, hcx, hcy); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.5, hcy); ctx.quadraticCurveTo(hcx+hr*1.2, hcy-hr*0.6, hcx+hr*0.8, hcy-hr*1.2); ctx.quadraticCurveTo(hcx+hr*0.3, hcy-hr*0.5, hcx, hcy); ctx.fill();
+          // Face overlay
+          ctx.fillStyle = "#a8a0e0";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.42, hr*0.38, 0, 0, Math.PI*2); ctx.fill();
+          // Headdress glyph
+          ctx.fillStyle = "#e8c830";
+          ctx.font = `${hr * 0.8}px serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText("𓄤", hcx, hcy - hr*1.0);
+          // Eyes
+          ctx.fillStyle = "#1a1540";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.18, hcy-hr*0.05, hr*0.09, hr*0.07, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.18, hcy-hr*0.05, hr*0.09, hr*0.07, 0, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "ptah") {
+          // Mummiform Ptah — blue skin, close-fitting cap
+          ctx.fillStyle = "#2848a8";
+          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.56, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Cap (no hair, tight fitting)
+          ctx.fillStyle = "#1830a0";
+          ctx.beginPath(); ctx.arc(hcx, hcy - hr*0.05, hr*0.56, Math.PI, 0); ctx.fill();
+          // Beard
+          ctx.fillStyle = "#1838a8";
+          ctx.fillRect(hcx-hr*0.12, hcy+hr*0.42, hr*0.24, hr*0.55);
+          // Was sceptre hint (thin vertical)
+          ctx.strokeStyle = "#c8a030"; ctx.lineWidth = hr*0.12;
+          ctx.beginPath(); ctx.moveTo(hcx+hr*0.7, hcy-hr*0.3); ctx.lineTo(hcx+hr*0.7, hcy+hr*0.6); ctx.stroke();
+          // Eyes
+          ctx.fillStyle = "#e8e0d0";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.2, hcy+hr*0.05, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.2, hcy+hr*0.05, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#1a1540";
+          ctx.beginPath(); ctx.ellipse(hcx-hr*0.2, hcy+hr*0.05, hr*0.05, hr*0.04, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hcx+hr*0.2, hcy+hr*0.05, hr*0.05, hr*0.04, 0, 0, Math.PI*2); ctx.fill();
+
+        } else {
+          // Generic — plain circular head
+          ctx.fillStyle = "#888898";
+          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.6, 0, Math.PI*2); ctx.fill();
+        }
+
+        // Base plinth
+        ctx.fillStyle = isNear ? "rgba(194,168,107,0.35)" : "rgba(100,85,60,0.5)";
+        ctx.fillRect(obj.x - 2, uy - 2, obj.w + 4, 5);
+
+        // Glow if near
         if (isNear) {
           ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 1.5;
-          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 8;
-          ctx.strokeRect(ux - 1, uy - 1, dispW + 2, dispH + 2);
+          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.moveTo(ux - obj.w*0.48, uy);
+          ctx.lineTo(ux - obj.w*0.32, obj.y + 10);
+          ctx.lineTo(ux - obj.w*0.2,  obj.y + 2);
+          ctx.lineTo(ux + obj.w*0.2,  obj.y + 2);
+          ctx.lineTo(ux + obj.w*0.32, obj.y + 10);
+          ctx.lineTo(ux + obj.w*0.48, uy);
+          ctx.closePath(); ctx.stroke();
           ctx.shadowBlur = 0;
         }
         break;
       }
 
       case "rosetta": {
-        // Hieroglyph coin sprites — each piece is a golden oval coin
-        const glyphList = ["𓂀","𓄿","𓈖","𓏏","𓊪"];
-        const coinKeys  = ["rosetta_1","rosetta_2","rosetta_3","rosetta_4","rosetta_5"];
-        const coinIdx   = glyphList.indexOf(obj.glyph);
-        const coinKey   = coinKeys[Math.max(0, coinIdx)];
-        const coinImg   = sprites[coinKey];
-
-        // Gentle float bob
-        const floatY = Math.sin(gameTime * 1.4 + obj.x * 0.1) * 1.5;
-
-        // Glow aura
-        const auraR = obj.w * 1.8;
-        const aura = ctx.createRadialGradient(obj.x+obj.w/2, obj.y+obj.h/2+floatY, 0,
-                                               obj.x+obj.w/2, obj.y+obj.h/2+floatY, auraR);
-        aura.addColorStop(0, "rgba(220,170,50,0.22)");
-        aura.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = aura;
-        ctx.beginPath(); ctx.arc(obj.x+obj.w/2, obj.y+obj.h/2+floatY, auraR, 0, Math.PI*2); ctx.fill();
-
-        // Drop shadow
+        // Shadow
         ctx.fillStyle = "rgba(0,0,0,0.4)";
-        ctx.beginPath(); ctx.ellipse(obj.x+obj.w/2+1, obj.y+obj.h+2+floatY, obj.w*0.5, 3, 0, 0, Math.PI*2); ctx.fill();
-
-        if (coinImg && coinImg.complete && coinImg.naturalWidth > 0) {
-          ctx.save();
-          if (isNear) { ctx.shadowColor = "#f0d060"; ctx.shadowBlur = 14; }
-          ctx.drawImage(coinImg, obj.x, obj.y + floatY, obj.w, obj.h);
-          ctx.shadowBlur = 0;
-          ctx.restore();
-        } else {
-          // Fallback: gold oval
-          const rg = ctx.createRadialGradient(obj.x+obj.w/2-2, obj.y+obj.h/2-2+floatY, 0,
-                                               obj.x+obj.w/2, obj.y+obj.h/2+floatY, obj.w*0.6);
-          rg.addColorStop(0, "#f8e080"); rg.addColorStop(0.5, "#d4a030"); rg.addColorStop(1, "#886010");
-          ctx.fillStyle = rg;
-          ctx.beginPath(); ctx.ellipse(obj.x+obj.w/2, obj.y+obj.h/2+floatY, obj.w/2, obj.h/2, 0, 0, Math.PI*2); ctx.fill();
-        }
+        ctx.fillRect(obj.x + 2, obj.y + 2, obj.w, obj.h);
+        // Stone fragment
+        const rg = ctx.createLinearGradient(obj.x, obj.y, obj.x + obj.w, obj.y + obj.h);
+        rg.addColorStop(0, "#c09858"); rg.addColorStop(0.5, isNear ? "#e0b878" : "#b08848"); rg.addColorStop(1, "#907038");
+        ctx.fillStyle = rg;
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        // Chipped corners
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        ctx.beginPath(); ctx.moveTo(obj.x, obj.y); ctx.lineTo(obj.x + 3, obj.y); ctx.lineTo(obj.x, obj.y + 3); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(obj.x + obj.w, obj.y + obj.h); ctx.lineTo(obj.x + obj.w - 3, obj.y + obj.h); ctx.lineTo(obj.x + obj.w, obj.y + obj.h - 3); ctx.fill();
+        // Glyph
+        ctx.fillStyle = "#2a1808";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `${Math.min(obj.w, obj.h) * 0.85}px serif`;
+        ctx.fillText(obj.glyph || "𓂀", obj.x + obj.w / 2, obj.y + obj.h / 2);
         // Letter hint if decoded
         if (playerGlyphMap[obj.glyph]) {
-          ctx.fillStyle = "#f8e090";
-          ctx.font = `bold ${Math.min(obj.w,obj.h)*0.6}px monospace`;
-          ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText(playerGlyphMap[obj.glyph], obj.x+obj.w/2, obj.y+obj.h+8+floatY);
+          ctx.fillStyle = "#d6c48a";
+          ctx.font = `${Math.min(obj.w, obj.h) * 0.45}px monospace`;
+          ctx.fillText(playerGlyphMap[obj.glyph], obj.x + obj.w / 2, obj.y + obj.h + 7);
         }
+        // Highlight pulse
         if (isNear) {
+          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 10;
           ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 1.5;
-          ctx.strokeRect(obj.x-1, obj.y-1+floatY, obj.w+2, obj.h+2);
+          ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+          ctx.shadowBlur = 0;
+        } else {
+          ctx.strokeStyle = "#7a5a28"; ctx.lineWidth = 1;
+          ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
         }
         break;
       }
@@ -1146,26 +1549,55 @@ function drawObjects() {
       }
 
       case "heart-scarab": {
-        // Sprite: green scarab beetle
-        const scx = obj.x + obj.w/2, scy = obj.y + obj.h/2;
+        // Green jasper scarab beetle
+        const scx = obj.x + obj.w / 2;
+        const scy = obj.y + obj.h / 2;
         // Shadow
         ctx.fillStyle = "rgba(0,0,0,0.4)";
-        ctx.beginPath(); ctx.ellipse(scx+2, scy+3, obj.w*0.55, 4, 0, 0, Math.PI*2); ctx.fill();
-
-        const scarabImg = sprites.scarab;
-        if (scarabImg && scarabImg.complete && scarabImg.naturalWidth > 0) {
-          ctx.save();
-          if (isNear) { ctx.shadowColor = "#50f090"; ctx.shadowBlur = 16; }
-          ctx.drawImage(scarabImg, obj.x - 4, obj.y - 4, obj.w + 8, obj.h + 8);
-          ctx.shadowBlur = 0;
-          ctx.restore();
-        } else {
-          ctx.fillStyle = "#2a9850";
-          ctx.beginPath(); ctx.ellipse(scx, scy, obj.w*0.5, obj.h*0.4, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(scx + 1, scy + 2, obj.w * 0.6, obj.h * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+        // Body
+        const sbg = ctx.createRadialGradient(scx - obj.w*0.1, scy - obj.h*0.1, 0, scx, scy, obj.w * 0.7);
+        sbg.addColorStop(0, "#5ad880");
+        sbg.addColorStop(0.4, "#2a9850");
+        sbg.addColorStop(1, "#156030");
+        ctx.fillStyle = sbg;
+        ctx.beginPath(); ctx.ellipse(scx, scy, obj.w * 0.5, obj.h * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+        // Wings spread wide
+        ctx.fillStyle = "rgba(50,180,90,0.7)";
+        ctx.beginPath();
+        ctx.moveTo(scx - obj.w*0.5, scy);
+        ctx.quadraticCurveTo(scx - obj.w*1.1, scy - obj.h*0.5, scx - obj.w*0.9, scy - obj.h*0.8);
+        ctx.quadraticCurveTo(scx - obj.w*0.4, scy - obj.h*0.5, scx, scy);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(scx + obj.w*0.5, scy);
+        ctx.quadraticCurveTo(scx + obj.w*1.1, scy - obj.h*0.5, scx + obj.w*0.9, scy - obj.h*0.8);
+        ctx.quadraticCurveTo(scx + obj.w*0.4, scy - obj.h*0.5, scx, scy);
+        ctx.fill();
+        // Wing veins
+        ctx.strokeStyle = "rgba(20,100,40,0.5)"; ctx.lineWidth = 0.7;
+        for (let v = 1; v < 4; v++) {
+          ctx.beginPath();
+          ctx.moveTo(scx - obj.w*0.5, scy);
+          ctx.quadraticCurveTo(scx - obj.w*(0.5+v*0.1), scy - obj.h*(0.2+v*0.12), scx - obj.w*(0.3+v*0.18), scy - obj.h*0.7);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(scx + obj.w*0.5, scy);
+          ctx.quadraticCurveTo(scx + obj.w*(0.5+v*0.1), scy - obj.h*(0.2+v*0.12), scx + obj.w*(0.3+v*0.18), scy - obj.h*0.7);
+          ctx.stroke();
         }
+        // Head with antennae
+        ctx.fillStyle = "#1a7038";
+        ctx.beginPath(); ctx.arc(scx, scy - obj.h*0.42, obj.w * 0.22, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#1a7038"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(scx - obj.w*0.15, scy - obj.h*0.55); ctx.lineTo(scx - obj.w*0.3, scy - obj.h*0.9); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(scx + obj.w*0.15, scy - obj.h*0.55); ctx.lineTo(scx + obj.w*0.3, scy - obj.h*0.9); ctx.stroke();
+        // Glow
         if (isNear) {
+          ctx.shadowColor = "#50f090"; ctx.shadowBlur = 16;
           ctx.strokeStyle = "#80f0a0"; ctx.lineWidth = 1.5;
-          ctx.strokeRect(obj.x-2, obj.y-2, obj.w+4, obj.h+4);
+          ctx.beginPath(); ctx.ellipse(scx, scy, obj.w * 0.5, obj.h * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
+          ctx.shadowBlur = 0;
         }
         break;
       }
@@ -1206,35 +1638,48 @@ function drawObjects() {
       }
 
       case "canopic": {
-        // Sprite: canopic jar
-        const ccx = obj.x + obj.w/2;
+        const cx2 = obj.x + obj.w / 2;
         // Shadow
         ctx.fillStyle = "rgba(0,0,0,0.35)";
-        ctx.beginPath(); ctx.ellipse(ccx+2, obj.y+obj.h+3, obj.w*0.4, 4, 0, 0, Math.PI*2); ctx.fill();
-
-        const canImg = sprites.canopic;
-        if (canImg && canImg.complete && canImg.naturalWidth > 0) {
-          ctx.save();
-          if (isNear) { ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 10; }
-          // Draw slightly larger than obj bounds for visual weight
-          ctx.drawImage(canImg, obj.x - 4, obj.y - 2, obj.w + 8, obj.h + 6);
-          ctx.shadowBlur = 0;
-          ctx.restore();
-        } else {
-          ctx.fillStyle = isNear ? "#9a8460" : "#7a6a48";
-          ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-        }
-        // Ritual order indicator (small number badge)
-        if (obj.ritualIndex) {
-          ctx.fillStyle = "rgba(0,0,0,0.6)";
-          ctx.beginPath(); ctx.arc(obj.x + obj.w - 3, obj.y + 3, 5, 0, Math.PI*2); ctx.fill();
-          ctx.fillStyle = "#f0d070"; ctx.font = "bold 7px monospace";
-          ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText(obj.ritualIndex, obj.x + obj.w - 3, obj.y + 4);
+        ctx.beginPath(); ctx.ellipse(cx2 + 2, obj.y + obj.h + 3, obj.w / 1.8, 4, 0, 0, Math.PI * 2); ctx.fill();
+        // Jar body
+        const jg = ctx.createLinearGradient(obj.x, 0, obj.x + obj.w, 0);
+        jg.addColorStop(0, "#5a4830"); jg.addColorStop(0.4, isNear ? "#9a8460" : "#7a6a48"); jg.addColorStop(1, "#4a3828");
+        ctx.fillStyle = jg;
+        ctx.beginPath();
+        ctx.moveTo(cx2 - obj.w * 0.3, obj.y + 12);
+        ctx.quadraticCurveTo(cx2 - obj.w * 0.55, obj.y + obj.h * 0.5, cx2 - obj.w * 0.45, obj.y + obj.h);
+        ctx.lineTo(cx2 + obj.w * 0.45, obj.y + obj.h);
+        ctx.quadraticCurveTo(cx2 + obj.w * 0.55, obj.y + obj.h * 0.5, cx2 + obj.w * 0.3, obj.y + 12);
+        ctx.closePath();
+        ctx.fill();
+        // Lid / head stopper
+        const hdColors = { 1: "#c09058", 2: "#4a8048", 3: "#803028", 4: "#5840a0" };
+        ctx.fillStyle = isNear ? "#f0d060" : (hdColors[obj.ritualIndex] || "#9a8460");
+        ctx.beginPath();
+        ctx.ellipse(cx2, obj.y + 12, obj.w * 0.42, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Mini head detail
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.font = "8px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(obj.head === "human" ? "𓁹" : obj.head === "baboon" ? "𓁺" : obj.head === "jackal" ? "𓁛" : "𓁜", cx2, obj.y + 11);
+        // Ritual index
+        ctx.fillStyle = "rgba(240,208,112,0.7)";
+        ctx.font = "8px serif";
+        ctx.fillText(String(obj.ritualIndex), cx2, obj.y + obj.h * 0.65);
+        if (canopicSequence.includes(obj.ritualIndex)) {
+          ctx.fillStyle = "#80c860";
+          ctx.font = "9px sans-serif";
+          ctx.fillText("✓", cx2, obj.y + obj.h - 5);
         }
         if (isNear) {
           ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 1.5;
-          ctx.strokeRect(obj.x-2, obj.y-2, obj.w+4, obj.h+4);
+          ctx.beginPath();
+          ctx.moveTo(cx2 - obj.w * 0.3, obj.y + 12);
+          ctx.quadraticCurveTo(cx2 - obj.w * 0.55, obj.y + obj.h * 0.5, cx2 - obj.w * 0.45, obj.y + obj.h);
+          ctx.lineTo(cx2 + obj.w * 0.45, obj.y + obj.h);
+          ctx.quadraticCurveTo(cx2 + obj.w * 0.55, obj.y + obj.h * 0.5, cx2 + obj.w * 0.3, obj.y + 12);
+          ctx.closePath(); ctx.stroke();
         }
         break;
       }
@@ -1439,54 +1884,31 @@ function drawObjects() {
       case "key-fragment":
       case "canopic-ring":
       case "canopic-seal": {
-        const ix = obj.x + obj.w/2, iy = obj.y + obj.h/2;
-
-        // Pick sprite by type
-        const itemSpriteMap = {
-          "canopic-seal": "gem_purple",
-          "canopic-ring": "gem_red",
-          "key-fragment": "gem_purple",
-          // offering-items by offeringType color
-        };
-        let itemKey = itemSpriteMap[obj.type];
-        if (obj.type === "offering-item") {
-          itemKey = obj.offeringType === "bread" ? "gem_red"
-                  : obj.offeringType === "oil"   ? "gem_blue"
-                  : "gem_purple";
-        }
-
-        const iImg = itemKey ? sprites[itemKey] : null;
-
-        // Idle ambient glow
-        const idleGlow = ctx.createRadialGradient(ix, iy, 0, ix, iy, obj.w * 1.4);
-        idleGlow.addColorStop(0, "rgba(194,168,107,0.18)"); idleGlow.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = idleGlow;
-        ctx.beginPath(); ctx.arc(ix, iy, obj.w*1.4, 0, Math.PI*2); ctx.fill();
-
-        // Shadow
-        ctx.fillStyle = "rgba(0,0,0,0.35)";
-        ctx.beginPath(); ctx.ellipse(ix+1, iy+2, obj.w*0.5, 3, 0, 0, Math.PI*2); ctx.fill();
-
-        if (iImg && iImg.complete && iImg.naturalWidth > 0) {
-          ctx.save();
-          if (isNear) { ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 12; }
-          ctx.drawImage(iImg, obj.x, obj.y, obj.w, obj.h);
-          ctx.shadowBlur = 0;
-          ctx.restore();
-        } else {
-          // Fallback gem circle
-          const r = Math.min(obj.w, obj.h)/2;
-          const baseCol = obj.type === "canopic-seal" ? "#c8b880"
-                        : obj.type === "canopic-ring" ? "#c8a030" : obj.color || "#c0a050";
-          const grad = ctx.createRadialGradient(ix-r*0.3, iy-r*0.3, 0, ix, iy, r);
-          grad.addColorStop(0, "#fff8e0"); grad.addColorStop(0.3, baseCol); grad.addColorStop(1, "#7a6020");
-          ctx.fillStyle = grad;
-          ctx.beginPath(); ctx.arc(ix, iy, r, 0, Math.PI*2); ctx.fill();
-        }
+        const ix = obj.x + obj.w / 2, iy = obj.y + obj.h / 2;
+        const r = Math.min(obj.w, obj.h) / 2;
+        // Glow
         if (isNear) {
-          ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 1.5;
-          ctx.strokeRect(obj.x-1, obj.y-1, obj.w+2, obj.h+2);
+          const glow = ctx.createRadialGradient(ix, iy, 0, ix, iy, r * 2.5);
+          glow.addColorStop(0, "rgba(255,215,80,0.25)"); glow.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(ix, iy, r * 2.5, 0, Math.PI * 2); ctx.fill();
         }
+        // Idle float glow
+        const idleGlow = ctx.createRadialGradient(ix, iy, 0, ix, iy, r * 1.8);
+        idleGlow.addColorStop(0, "rgba(194,168,107,0.2)"); idleGlow.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = idleGlow;
+        ctx.beginPath(); ctx.arc(ix, iy, r * 1.8, 0, Math.PI * 2); ctx.fill();
+        // Main gem
+        const itemGrad = ctx.createRadialGradient(ix - r * 0.3, iy - r * 0.3, 0, ix, iy, r);
+        const baseCol = obj.type === "canopic-seal" ? "#c8b880" : obj.type === "canopic-ring" ? "#c8a030" : obj.color || "#c0a050";
+        itemGrad.addColorStop(0, "#fff8e0"); itemGrad.addColorStop(0.3, baseCol); itemGrad.addColorStop(1, "#7a6020");
+        ctx.fillStyle = itemGrad;
+        ctx.beginPath(); ctx.arc(ix, iy, r, 0, Math.PI * 2); ctx.fill();
+        // Shine
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        ctx.beginPath(); ctx.arc(ix - r * 0.3, iy - r * 0.3, r * 0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = isNear ? "#f9d342" : "#c0a050"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(ix, iy, r, 0, Math.PI * 2); ctx.stroke();
         break;
       }
 
@@ -1539,96 +1961,111 @@ function shadeColor(hex, pct) {
 // DRAW — PLAYER
 // =====================
 function drawPlayer() {
+  const px = player.x, py = player.y;
+  const walk = player.walkFrame;
+  const isMoving = player.isMoving;
+
   ctx.save();
 
-  const walkSway = player.isMoving ? Math.sin(gameTime * 10) * 1.5 : 0;
-
-  // Body shadow
+  // Shadow
   ctx.fillStyle = "rgba(0,0,0,0.35)";
-  ctx.beginPath();
-  ctx.ellipse(player.x + 2, player.y + player.size * 0.9, player.size * 0.75, player.size * 0.28, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.ellipse(px + 2, py + 14, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
 
-  // Legs (simple walk animation)
-  if (player.isMoving) {
-    const legSway = Math.sin(gameTime * 10);
-    ctx.strokeStyle = "#8a6030"; ctx.lineWidth = 3; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(player.x - 3, player.y + player.size * 0.3);
-    ctx.lineTo(player.x - 3 + legSway * 3, player.y + player.size * 0.85); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(player.x + 3, player.y + player.size * 0.3);
-    ctx.lineTo(player.x + 3 - legSway * 3, player.y + player.size * 0.85); ctx.stroke();
+  // Legs (walking animation)
+  if (isMoving) {
+    const legSwing = Math.sin(walk) * 5;
+    ctx.fillStyle = "#c8a870";
+    ctx.fillRect(px - 4, py + 6, 4, 10 + legSwing);
+    ctx.fillRect(px + 2, py + 6, 4, 10 - legSwing);
+  } else {
+    ctx.fillStyle = "#c8a870";
+    ctx.fillRect(px - 4, py + 6, 4, 10);
+    ctx.fillRect(px + 2, py + 6, 4, 10);
   }
 
-  // Robe / body
-  const bodyG = ctx.createLinearGradient(player.x - player.size, player.y - player.size * 0.5, player.x + player.size, player.y + player.size);
-  bodyG.addColorStop(0, "#c8b890");
-  bodyG.addColorStop(0.4, "#e8d8b0");
-  bodyG.addColorStop(1, "#a89068");
-  ctx.fillStyle = bodyG;
+  // Robe / tunic body
+  const robeGrad = ctx.createLinearGradient(px - 8, py, px + 8, py);
+  robeGrad.addColorStop(0, "#d8c898");
+  robeGrad.addColorStop(0.5, "#f0e8d0");
+  robeGrad.addColorStop(1, "#c8b880");
+  ctx.fillStyle = robeGrad;
   ctx.beginPath();
-  ctx.ellipse(player.x + walkSway * 0.3, player.y + player.size * 0.2, player.size * 0.62, player.size * 0.72, 0, 0, Math.PI * 2);
+  ctx.moveTo(px - 7, py + 4);
+  ctx.lineTo(px - 8, py + 8);
+  ctx.lineTo(px + 8, py + 8);
+  ctx.lineTo(px + 7, py + 4);
+  ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = "#7a5828"; ctx.lineWidth = 1;
-  ctx.stroke();
+
+  // Arms
+  if (isMoving) {
+    const armSwing = Math.sin(walk) * 4;
+    ctx.fillStyle = "#d8c898";
+    ctx.fillRect(px - 10, py - 2 + armSwing, 4, 8);
+    ctx.fillRect(px + 6, py - 2 - armSwing, 4, 8);
+  } else {
+    ctx.fillStyle = "#d8c898";
+    ctx.fillRect(px - 10, py - 2, 4, 8);
+    ctx.fillRect(px + 6, py - 2, 4, 8);
+  }
 
   // Head
-  const headG = ctx.createRadialGradient(player.x - 2 + walkSway * 0.4, player.y - player.size * 0.55, 0,
-                                          player.x + walkSway * 0.4, player.y - player.size * 0.5, player.size * 0.52);
-  headG.addColorStop(0, "#f0d8a8");
-  headG.addColorStop(0.6, "#d4a878");
-  headG.addColorStop(1, "#a87840");
-  ctx.fillStyle = headG;
-  ctx.beginPath();
-  ctx.ellipse(player.x + walkSway * 0.4, player.y - player.size * 0.5, player.size * 0.42, player.size * 0.48, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "#7a5828"; ctx.lineWidth = 1; ctx.stroke();
+  const headGrad = ctx.createRadialGradient(px - 2, py - 8, 0, px, py - 7, 9);
+  headGrad.addColorStop(0, "#f0e0c0");
+  headGrad.addColorStop(0.6, "#d4b880");
+  headGrad.addColorStop(1, "#a88040");
+  ctx.fillStyle = headGrad;
+  ctx.beginPath(); ctx.arc(px, py - 7, 9, 0, Math.PI * 2); ctx.fill();
 
-  // Nemes headdress stripes
-  ctx.strokeStyle = "rgba(40,80,160,0.5)"; ctx.lineWidth = 1.2;
-  for (let i = 0; i < 3; i++) {
-    const hy = player.y - player.size * 0.75 + i * player.size * 0.12;
-    ctx.beginPath();
-    ctx.moveTo(player.x - player.size * 0.38 + walkSway * 0.3, hy);
-    ctx.lineTo(player.x + player.size * 0.38 + walkSway * 0.3, hy);
-    ctx.stroke();
-  }
+  // Nemes headcloth
+  ctx.fillStyle = "#4040c0";
+  ctx.beginPath();
+  ctx.arc(px, py - 10, 8.5, Math.PI, 2 * Math.PI);
+  ctx.fill();
+  // Headdress stripe
+  ctx.fillStyle = "#f0d060";
+  ctx.fillRect(px - 8.5, py - 13, 17, 3);
+  // Side lappets
+  ctx.fillStyle = "#3838a8";
+  ctx.fillRect(px - 10, py - 11, 4, 8);
+  ctx.fillRect(px + 6, py - 11, 4, 8);
+  // Stripe on lappets
+  ctx.fillStyle = "#f0d060";
+  ctx.fillRect(px - 9, py - 9, 2, 1);
+  ctx.fillRect(px + 7, py - 9, 2, 1);
 
   // Eyes
-  ctx.fillStyle = "#2a1808";
-  ctx.beginPath(); ctx.ellipse(player.x - 5 + walkSway * 0.4, player.y - player.size * 0.52, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(player.x + 5 + walkSway * 0.4, player.y - player.size * 0.52, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#1a0e06";
+  ctx.beginPath(); ctx.arc(px - 3, py - 8, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(px + 3, py - 8, 1.5, 0, Math.PI * 2); ctx.fill();
   // Kohl lines
   ctx.strokeStyle = "#1a0e06"; ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.moveTo(player.x - 8 + walkSway*0.4, player.y - player.size*0.52); ctx.lineTo(player.x - 4 + walkSway*0.4, player.y - player.size*0.52); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(player.x + 4 + walkSway*0.4, player.y - player.size*0.52); ctx.lineTo(player.x + 8 + walkSway*0.4, player.y - player.size*0.52); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px - 5, py - 8); ctx.lineTo(px - 3, py - 8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px + 3, py - 8); ctx.lineTo(px + 5, py - 8); ctx.stroke();
 
-  // Torch held item (if carrying)
-  if (player.heldItem && player.heldItem.type === "torch") {
-    const tx = player.x + player.size * 0.8 + walkSway;
-    const ty = player.y - player.size * 0.3;
-    // Stick
-    ctx.strokeStyle = "#8a6030"; ctx.lineWidth = 2; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(tx, ty + 12); ctx.lineTo(tx, ty - 4); ctx.stroke();
-    // Flame
+  // Held torch
+  if (player.heldItem?.type === "torch") {
+    ctx.fillStyle = "#a07830";
+    ctx.fillRect(px + 9, py - 5, 4, 14);
+    ctx.fillStyle = "#c9a24a";
+    ctx.fillRect(px + 10, py - 5, 2, 12);
     if (player.lampOn) {
-      const fp = 1 + Math.sin(gameTime * 3) * 0.12;
-      const flameG = ctx.createRadialGradient(tx, ty - 8, 0, tx, ty - 6, 8 * fp);
-      flameG.addColorStop(0, "rgba(255,250,180,0.95)");
-      flameG.addColorStop(0.4, "rgba(255,160,30,0.8)");
-      flameG.addColorStop(1, "rgba(255,60,0,0)");
-      ctx.fillStyle = flameG;
-      ctx.beginPath(); ctx.arc(tx, ty - 6, 8 * fp, 0, Math.PI * 2); ctx.fill();
+      const tp = 0.8 + Math.sin(gameTime * 8) * 0.2;
+      const tFlame = ctx.createRadialGradient(px + 11, py - 10, 0, px + 11, py - 8, 10 * tp);
+      tFlame.addColorStop(0, "rgba(255,250,180,0.9)");
+      tFlame.addColorStop(0.4, "rgba(255,160,30,0.7)");
+      tFlame.addColorStop(1, "rgba(255,80,0,0)");
+      ctx.fillStyle = tFlame;
+      ctx.beginPath(); ctx.arc(px + 11, py - 9, 10 * tp, 0, Math.PI * 2); ctx.fill();
     }
-  } else if (player.heldItem) {
-    // Generic held item dot
-    ctx.fillStyle = "#f9d342";
-    ctx.beginPath(); ctx.arc(player.x + player.size * 0.8, player.y - player.size * 0.2, 3.5, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "#c8a020"; ctx.lineWidth = 1; ctx.stroke();
   }
 
   ctx.restore();
 }
 
+// =====================
+// DRAW — LIGHTING
+// =====================
 function drawLighting() {
   const inCorridor = currentRoom?.id === "deep-corridor";
   const useCorridorLight = inCorridor && corridorTorchMounted;
@@ -1734,19 +2171,20 @@ function loop() {
   updateCamera();
   checkProximity();
   updateTorchPhysics();
-  checkDoorTransition();
+  if (!roomFadingOut && !roomFadingIn) checkDoorTransition();
   checkSarcophagusOpen();
   updateSarcophagus();
+  updateRoomFade();
 
   gameTime += 0.016;
   cameraState.zoom += (cameraState.targetZoom - cameraState.zoom) * 0.1;
 
   applyCameraTransform();
-  ctx.imageSmoothingEnabled = false; // pixel art: no blurring
   drawTomb();
   drawObjects();
   drawPlayer();
   drawLighting();
+  drawRoomFade();
 
   resetTransform();
   updateMapDot();
@@ -1755,89 +2193,8 @@ function loop() {
 }
 
 // =====================
-// SPRITE LOADER
-// =====================
-const sprites = {};
-const SPRITE_FILES = {
-  // Characters / figures
-  ushabti_f0:  'sprites/ushabti_f0.png',   // Seth/ushabti standing frame 0
-  ushabti_f1:  'sprites/ushabti_f1.png',   // Seth/ushabti standing frame 1
-  ushabti_f2:  'sprites/ushabti_f2.png',   // Seth/ushabti standing frame 2
-  ushabti_f3:  'sprites/ushabti_f3.png',   // Seth/ushabti standing frame 3
-  player_f0:   'sprites/player_f0.png',    // Mummy player frame 0
-  player_f1:   'sprites/player_f1.png',    // Mummy player frame 1
-  mummy:       'sprites/mummy_standing.png', // Mummy for sarcophagus
-
-  // Existing tomb items
-  ushabti:     'sprites/ushabti_anubis.png', // fallback Anubis jar
-  scarab:      'sprites/scarab.png',
-  gem_red:     'sprites/gem_red.png',
-  gem_blue:    'sprites/gem_blue.png',
-  gem_purple:  'sprites/gem_purple.png',
-  ankh:        'sprites/ankh.png',
-  canopic:     'sprites/canopic_jar.png',
-  eye_of_ra:   'sprites/eye_of_ra.png',
-  brazier:     'sprites/brazier.png',
-
-  // Rosetta coin pieces (hieroglyph coins from deben sheet)
-  rosetta_1:   'sprites/rosetta_1.png',    // ankh coin
-  rosetta_2:   'sprites/rosetta_2.png',    // heron coin
-  rosetta_3:   'sprites/rosetta_3.png',    // lotus coin
-  rosetta_4:   'sprites/rosetta_4.png',    // goose coin
-  rosetta_5:   'sprites/rosetta_5.png',    // eye of horus coin
-
-  // Sarcophagus (Zombie Island sprites, isometric)
-  sarc_closed:  'sprites/sarcophagus_gold_closed.png',
-  sarc_open:    'sprites/sarcophagus_gold_open.png',
-
-  // UI / backgrounds
-  papyrus:     'sprites/papyrus_panel.png', // inspect panel background
-
-  // Hieroglyph wall tiles (stone carved glyphs for room decoration)
-  gtile_eye:   'sprites/gtile_all_02.png',  // eye of Ra tile
-  gtile_ankh:  'sprites/gtile_all_03.png',  // ankh tile
-  gtile_horus: 'sprites/gtile_all_04.png',  // horus bird tile
-  gtile_lion:  'sprites/gtile_all_24.png',  // lion tile
-  gtile_foot:  'sprites/gtile_all_10.png',  // foot glyph tile
-};
-
-let spritesLoaded = 0;
-const spritesTotal = Object.keys(SPRITE_FILES).length;
-
-function loadSprites(callback) {
-  for (const [key, src] of Object.entries(SPRITE_FILES)) {
-    const img = new Image();
-    img.onload = () => {
-      spritesLoaded++;
-      if (spritesLoaded >= spritesTotal) callback();
-    };
-    img.onerror = () => {
-      // Sprite failed to load - continue anyway, drawing code falls back to canvas
-      spritesLoaded++;
-      if (spritesLoaded >= spritesTotal) callback();
-    };
-    img.src = src;
-    sprites[key] = img;
-  }
-}
-
-// Helper: draw a sprite centred on obj, scaled to obj dimensions
-// scaleH: multiplier on height (ushabti is 32x64 native so we scale proportionally)
-function drawSprite(key, obj, padX=0, padY=0) {
-  const img = sprites[key];
-  if (!img || !img.complete || img.naturalWidth === 0) return false;
-  ctx.drawImage(img,
-    obj.x - padX,
-    obj.y - padY,
-    obj.w + padX*2,
-    obj.h + padY*2
-  );
-  return true;
-}
-
-// =====================
 // BOOT
 // =====================
 updateUI();
-loadSprites(() => loop());
+loop();
 

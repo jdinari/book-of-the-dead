@@ -93,12 +93,6 @@ function showUshabtiSpeech(text) {
 // =====================
 function showInspectUI(obj) {
   ui.style.display = "block";
-  // Apply papyrus texture background if sprite is loaded
-  if (typeof sprites !== "undefined" && sprites.papyrus && sprites.papyrus.complete && sprites.papyrus.naturalWidth > 0) {
-    ui.style.backgroundImage = `url(${sprites.papyrus.src})`;
-    ui.style.backgroundSize = "cover";
-    ui.style.backgroundRepeat = "no-repeat";
-  }
   const lines = [];
 
   if (obj.type === "sarcophagus") {
