@@ -3,14 +3,6 @@
 // =====================
 
 // =====================
-// ROOM FADE TRANSITION
-// =====================
-let roomFade = 0;
-let roomFadingOut = false;
-let roomFadingIn  = false;
-let pendingDoor   = null;
-
-// =====================
 // SARCOPHAGUS ANIMATION
 // =====================
 let sarcophagusLidOffset = 0;
@@ -400,9 +392,7 @@ function updateSarcophagus() {
 
 function transitionRoom(door) {
   if (!door || door.locked) return;
-  if (roomFadingOut || roomFadingIn) return; // already transitioning
-  pendingDoor = door;
-  roomFadingOut = true;
+  _doRoomTransition(door);
 }
 
 function _doRoomTransition(door) {
@@ -430,29 +420,6 @@ function _doRoomTransition(door) {
   if (mapVisible) renderMap();
 }
 
-function updateRoomFade() {
-  if (roomFadingOut) {
-    roomFade = Math.min(1, roomFade + 0.07);
-    if (roomFade >= 1 && pendingDoor) {
-      _doRoomTransition(pendingDoor);
-      pendingDoor   = null;
-      roomFadingOut = false;
-      roomFadingIn  = true;
-    }
-  } else if (roomFadingIn) {
-    roomFade = Math.max(0, roomFade - 0.055);
-    if (roomFade <= 0) roomFadingIn = false;
-  }
-}
-
-function drawRoomFade() {
-  if (roomFade <= 0) return;
-  ctx.save();
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = `rgba(0,0,0,${roomFade})`;
-  ctx.fillRect(0, 0, world.width, world.height);
-  ctx.restore();
-}
 function updateTorchPhysics() {
   for (const obj of getCurrentObjects()) {
     if (!obj || obj.type !== "torch" || obj.pickedUp) continue;
@@ -908,9 +875,11 @@ function drawFriezeStrip(c, x, y, w, h) {
 // DRAW — OBJECTS (enhanced)
 // =====================
 function drawObjects() {
+  ctx.imageSmoothingEnabled = false; // Keep pixel art crisp
   for (const obj of getCurrentObjects()) {
     if (obj.pickedUp) continue;
     ctx.save();
+    ctx.imageSmoothingEnabled = false;
 
     const isNear = obj === nearObject;
     const pulse  = isNear ? (0.88 + Math.sin(gameTime * 1.2) * 0.12) : 1;
@@ -1570,57 +1539,94 @@ function shadeColor(hex, pct) {
 // DRAW — PLAYER
 // =====================
 function drawPlayer() {
-  // Use mummy player sprite if loaded, else fall back to canvas drawing
-  const moving = player.isMoving;
-  const frameIdx = moving ? (Math.floor(gameTime * 8) % 2) : 0;
-  const pImg = sprites[`player_f${frameIdx}`] || sprites.player_f0;
+  ctx.save();
 
-  const pw = player.size * 2.2;
-  const ph = pw * 1.2;
-  const px = player.x - pw / 2;
-  const py = player.y - ph / 2;
+  const walkSway = player.isMoving ? Math.sin(gameTime * 10) * 1.5 : 0;
 
-  // Shadow
-  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  // Body shadow
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.beginPath();
-  ctx.ellipse(player.x, player.y + ph*0.38, pw*0.38, 4, 0, 0, Math.PI*2);
+  ctx.ellipse(player.x + 2, player.y + player.size * 0.9, player.size * 0.75, player.size * 0.28, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  if (pImg && pImg.complete && pImg.naturalWidth > 0) {
-    ctx.save();
-    // Torch light tint when lamp on
-    if (player.lampOn) {
-      ctx.shadowColor = "rgba(255,200,80,0.6)";
-      ctx.shadowBlur = 8;
-    }
-    ctx.drawImage(pImg, px, py, pw, ph);
-    ctx.shadowBlur = 0;
-    ctx.restore();
-  } else {
-    // Fallback: original canvas player
-    ctx.save();
-    ctx.fillStyle = "#d4a86a";
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#8a6030"; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2); ctx.stroke();
-    if (player.heldItem) {
-      ctx.fillStyle = "#f9d342";
-      ctx.beginPath(); ctx.arc(player.x + player.size * 0.7, player.y - player.size * 0.7, 4, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
+  // Legs (simple walk animation)
+  if (player.isMoving) {
+    const legSway = Math.sin(gameTime * 10);
+    ctx.strokeStyle = "#8a6030"; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(player.x - 3, player.y + player.size * 0.3);
+    ctx.lineTo(player.x - 3 + legSway * 3, player.y + player.size * 0.85); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(player.x + 3, player.y + player.size * 0.3);
+    ctx.lineTo(player.x + 3 - legSway * 3, player.y + player.size * 0.85); ctx.stroke();
   }
 
-  // Held item indicator (small sprite/glow above player)
-  if (player.heldItem) {
-    ctx.fillStyle = "rgba(249,211,66,0.7)";
+  // Robe / body
+  const bodyG = ctx.createLinearGradient(player.x - player.size, player.y - player.size * 0.5, player.x + player.size, player.y + player.size);
+  bodyG.addColorStop(0, "#c8b890");
+  bodyG.addColorStop(0.4, "#e8d8b0");
+  bodyG.addColorStop(1, "#a89068");
+  ctx.fillStyle = bodyG;
+  ctx.beginPath();
+  ctx.ellipse(player.x + walkSway * 0.3, player.y + player.size * 0.2, player.size * 0.62, player.size * 0.72, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#7a5828"; ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Head
+  const headG = ctx.createRadialGradient(player.x - 2 + walkSway * 0.4, player.y - player.size * 0.55, 0,
+                                          player.x + walkSway * 0.4, player.y - player.size * 0.5, player.size * 0.52);
+  headG.addColorStop(0, "#f0d8a8");
+  headG.addColorStop(0.6, "#d4a878");
+  headG.addColorStop(1, "#a87840");
+  ctx.fillStyle = headG;
+  ctx.beginPath();
+  ctx.ellipse(player.x + walkSway * 0.4, player.y - player.size * 0.5, player.size * 0.42, player.size * 0.48, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#7a5828"; ctx.lineWidth = 1; ctx.stroke();
+
+  // Nemes headdress stripes
+  ctx.strokeStyle = "rgba(40,80,160,0.5)"; ctx.lineWidth = 1.2;
+  for (let i = 0; i < 3; i++) {
+    const hy = player.y - player.size * 0.75 + i * player.size * 0.12;
     ctx.beginPath();
-    ctx.arc(player.x + pw*0.4, player.y - ph*0.55, 4, 0, Math.PI*2);
-    ctx.fill();
-    ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 1;
+    ctx.moveTo(player.x - player.size * 0.38 + walkSway * 0.3, hy);
+    ctx.lineTo(player.x + player.size * 0.38 + walkSway * 0.3, hy);
     ctx.stroke();
   }
+
+  // Eyes
+  ctx.fillStyle = "#2a1808";
+  ctx.beginPath(); ctx.ellipse(player.x - 5 + walkSway * 0.4, player.y - player.size * 0.52, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(player.x + 5 + walkSway * 0.4, player.y - player.size * 0.52, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+  // Kohl lines
+  ctx.strokeStyle = "#1a0e06"; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(player.x - 8 + walkSway*0.4, player.y - player.size*0.52); ctx.lineTo(player.x - 4 + walkSway*0.4, player.y - player.size*0.52); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(player.x + 4 + walkSway*0.4, player.y - player.size*0.52); ctx.lineTo(player.x + 8 + walkSway*0.4, player.y - player.size*0.52); ctx.stroke();
+
+  // Torch held item (if carrying)
+  if (player.heldItem && player.heldItem.type === "torch") {
+    const tx = player.x + player.size * 0.8 + walkSway;
+    const ty = player.y - player.size * 0.3;
+    // Stick
+    ctx.strokeStyle = "#8a6030"; ctx.lineWidth = 2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(tx, ty + 12); ctx.lineTo(tx, ty - 4); ctx.stroke();
+    // Flame
+    if (player.lampOn) {
+      const fp = 1 + Math.sin(gameTime * 3) * 0.12;
+      const flameG = ctx.createRadialGradient(tx, ty - 8, 0, tx, ty - 6, 8 * fp);
+      flameG.addColorStop(0, "rgba(255,250,180,0.95)");
+      flameG.addColorStop(0.4, "rgba(255,160,30,0.8)");
+      flameG.addColorStop(1, "rgba(255,60,0,0)");
+      ctx.fillStyle = flameG;
+      ctx.beginPath(); ctx.arc(tx, ty - 6, 8 * fp, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (player.heldItem) {
+    // Generic held item dot
+    ctx.fillStyle = "#f9d342";
+    ctx.beginPath(); ctx.arc(player.x + player.size * 0.8, player.y - player.size * 0.2, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#c8a020"; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  ctx.restore();
 }
 
 function drawLighting() {
@@ -1728,20 +1734,19 @@ function loop() {
   updateCamera();
   checkProximity();
   updateTorchPhysics();
-  if (!roomFadingOut && !roomFadingIn) checkDoorTransition();
+  checkDoorTransition();
   checkSarcophagusOpen();
   updateSarcophagus();
-  updateRoomFade();
 
   gameTime += 0.016;
   cameraState.zoom += (cameraState.targetZoom - cameraState.zoom) * 0.1;
 
   applyCameraTransform();
+  ctx.imageSmoothingEnabled = false; // pixel art: no blurring
   drawTomb();
   drawObjects();
   drawPlayer();
   drawLighting();
-  drawRoomFade();
 
   resetTransform();
   updateMapDot();
