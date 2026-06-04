@@ -918,284 +918,73 @@ function drawObjects() {
     switch (obj.type) {
 
       case "sarcophagus": {
-        // Top-down view of sarcophagus lid, based on real Egyptian coffins.
-        // Lid is elongated oval/rectangular — head end at obj.x, feet at obj.x+obj.w
-        // We orient it horizontally (the game's world is top-down)
-        const sw = obj.w, sh = obj.h;
-        const lx = obj.x, ly = obj.y;
-        const cx2 = lx + sw / 2, cy2 = ly + sh / 2;
+        // Isometric sarcophagus sprite (Zombie Island).
+        // Renders larger than the obj bounds so it has visual presence.
+        // The sprite is 296x217 — display at ~2× the obj width, centred.
+        const dispW = obj.w * 2.4;
+        const dispH = dispW * (217 / 296);
+        const sx = obj.x + obj.w/2 - dispW/2;
+        // Anchor bottom of sprite to obj bottom, offset upward for isometric depth
+        const sy = obj.y + obj.h/2 - dispH * 0.72;
 
-        // ── drop shadow ────────────────────────────────────────────
+        // Shadow ellipse under the sarcophagus
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.beginPath();
-        ctx.ellipse(cx2 + 4, cy2 + 4, sw*0.5, sh*0.52, 0, 0, Math.PI*2);
+        ctx.ellipse(obj.x + obj.w/2 + 4, obj.y + obj.h + 8, dispW*0.42, 8, 0, 0, Math.PI*2);
         ctx.fill();
 
-        // ── body box (under lid) ───────────────────────────────────
-        ctx.fillStyle = "#3a2e18";
-        ctx.beginPath();
-        ctx.ellipse(cx2, cy2, sw*0.49, sh*0.5, 0, 0, Math.PI*2);
-        ctx.fill();
+        // Pick closed or open sprite based on animation state
+        const useOpen = obj.opened || sarcophagusLidOffset > 20;
+        const sarcImg = useOpen ? sprites.sarc_open : sprites.sarc_closed;
 
-        // ── LID — slides left (head end) as sarcophagusLidOffset increases
-        ctx.save();
-        ctx.translate(-sarcophagusLidOffset * 0.8, -sarcophagusLidOffset * 0.2);
-
-        // Lid base color — aged cream/linen with gold tones (like image 3)
-        // or rich gold/blue for royal style (image 4)
-        const lidBase = ctx.createLinearGradient(lx, ly, lx+sw, ly+sh);
-        lidBase.addColorStop(0,    "#c8b878");
-        lidBase.addColorStop(0.15, "#e8d898");
-        lidBase.addColorStop(0.4,  "#f5edb8");
-        lidBase.addColorStop(0.65, "#e0d090");
-        lidBase.addColorStop(0.85, "#c8b870");
-        lidBase.addColorStop(1,    "#a89050");
-        ctx.fillStyle = lidBase;
-        ctx.beginPath();
-        ctx.ellipse(cx2, cy2, sw*0.48, sh*0.48, 0, 0, Math.PI*2);
-        ctx.fill();
-
-        // ── FACE MASK — head end (left side, obj.x area) ──────────
-        // Face occupies ~top 28% of the lid length
-        const faceEndX = lx + sw * 0.28;
-        const faceCX   = lx + sw * 0.16;
-        const faceCY   = cy2;
-        const faceRX   = sh * 0.41; // half-width of face oval
-        const faceRY   = sw * 0.12; // half-height of face oval (portrait in top-down)
-
-        // Skin tone — terracotta/sandstone (image 3) or gold (image 4)
-        const faceG = ctx.createLinearGradient(faceCX - faceRX, faceCY, faceCX + faceRX, faceCY);
-        faceG.addColorStop(0, "#c09858");
-        faceG.addColorStop(0.3, "#e0b870");
-        faceG.addColorStop(0.6, "#f0ca80");
-        faceG.addColorStop(1, "#c09858");
-        ctx.fillStyle = faceG;
-        ctx.beginPath();
-        ctx.ellipse(faceCX + faceRY, faceCY, faceRX * 0.82, faceRX, Math.PI/2, 0, Math.PI*2);
-        ctx.fill();
-
-        // Kohl eye lines — the defining feature, highly stylized
-        ctx.strokeStyle = "#1a0e06"; ctx.lineWidth = sh * 0.055;
-        ctx.lineCap = "round";
-        // Left eye (top in top-down)
-        const eyeY1 = cy2 - sh * 0.16;
-        ctx.beginPath();
-        ctx.moveTo(lx + sw*0.08, eyeY1);
-        ctx.lineTo(lx + sw*0.22, eyeY1);
-        ctx.stroke();
-        // Right eye
-        const eyeY2 = cy2 + sh * 0.16;
-        ctx.beginPath();
-        ctx.moveTo(lx + sw*0.08, eyeY2);
-        ctx.lineTo(lx + sw*0.22, eyeY2);
-        ctx.stroke();
-        ctx.lineCap = "butt";
-        // Eye whites
-        ctx.fillStyle = "#e8dfc0";
-        ctx.beginPath(); ctx.ellipse(lx+sw*0.15, eyeY1, sh*0.075, sh*0.048, Math.PI/2, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(lx+sw*0.15, eyeY2, sh*0.075, sh*0.048, Math.PI/2, 0, Math.PI*2); ctx.fill();
-        // Pupils
-        ctx.fillStyle = "#1a0e06";
-        ctx.beginPath(); ctx.arc(lx+sw*0.15, eyeY1, sh*0.028, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(lx+sw*0.15, eyeY2, sh*0.028, 0, Math.PI*2); ctx.fill();
-
-        // ── NEMES HEADDRESS — striped bands flanking face ──────────
-        // In top-down view: stripes run perpendicular to the lid axis
-        // Blue and gold alternating bands (images 3 & 4)
-        const nemesStartX = lx + sw * 0.02;
-        const nemesEndX   = lx + sw * 0.30;
-        const stripeColors = ["#2848a0","#c8a030","#2848a0","#c8a030","#2848a0","#c8a030","#2848a0","#c8a030","#d8c878"];
-        const stripeW = (nemesEndX - nemesStartX) / stripeColors.length;
-        for (let si = 0; si < stripeColors.length; si++) {
-          const sx = nemesStartX + si * stripeW;
-          // Clip to lid ellipse region
-          ctx.fillStyle = stripeColors[si];
-          ctx.globalAlpha = 0.65;
-          // Top half stripe
-          ctx.fillRect(sx, ly + sh*0.02, stripeW + 0.5, sh * 0.35);
-          // Bottom half stripe
-          ctx.fillRect(sx, ly + sh * 0.63, stripeW + 0.5, sh * 0.35);
-          ctx.globalAlpha = 1;
-        }
-        // Gold border on nemes
-        ctx.strokeStyle = "rgba(194,168,107,0.5)"; ctx.lineWidth = 0.5;
-        for (let si = 0; si < stripeColors.length; si++) {
-          const sx = nemesStartX + si * stripeW;
-          ctx.beginPath(); ctx.moveTo(sx, ly + sh*0.02); ctx.lineTo(sx, ly + sh*0.37); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(sx, ly + sh*0.63); ctx.lineTo(sx, ly + sh*0.98); ctx.stroke();
+        if (sarcImg && sarcImg.complete && sarcImg.naturalWidth > 0) {
+          ctx.save();
+          if (isNear && !obj.opened) {
+            ctx.shadowColor = "#f9d342";
+            ctx.shadowBlur = 18;
+          }
+          // Gentle lid-open transition: slide sprite slightly upward as lid opens
+          const lidRise = sarcophagusLidOffset > 0 ? -(sarcophagusLidOffset / 60) * 6 : 0;
+          ctx.drawImage(sarcImg, sx, sy + lidRise, dispW, dispH);
+          ctx.shadowBlur = 0;
+          ctx.restore();
+        } else {
+          // Fallback: gold rectangle
+          ctx.fillStyle = "#c8a030";
+          ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+          ctx.strokeStyle = isNear ? "#f9d342" : "#8a6820";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
         }
 
-        // ── USEKH COLLAR below face ────────────────────────────────
-        const collarX = lx + sw * 0.25;
-        const collarW = sw * 0.16;
-        // Concentric arc bands
-        const colColors = ["#2848a0","#c8a030","#c03020","#2848a0","#c8a030"];
-        for (let ci = 0; ci < colColors.length; ci++) {
-          ctx.strokeStyle = colColors[ci];
-          ctx.lineWidth = sh * 0.042;
-          ctx.globalAlpha = 0.7;
-          ctx.beginPath();
-          ctx.arc(collarX, cy2, sh*(0.18 + ci*0.055), -Math.PI*0.55, Math.PI*0.55);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-        }
-
-        // ── WINGED VULTURE / SCARAB PECTORAL in upper body section ──
-        const pectX = lx + sw * 0.42;
-        const pectY = cy2;
-        const pw    = sh * 0.38;
-        // Wings spread horizontally across the lid
-        ctx.fillStyle = "rgba(194,168,107,0.5)";
-        ctx.beginPath();
-        ctx.moveTo(pectX - pw*0.05, pectY);
-        ctx.quadraticCurveTo(pectX - pw*0.4, pectY - sh*0.22, pectX - pw*0.5, pectY);
-        ctx.quadraticCurveTo(pectX - pw*0.4, pectY + sh*0.22, pectX - pw*0.05, pectY);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(pectX + pw*0.05, pectY);
-        ctx.quadraticCurveTo(pectX + pw*0.4, pectY - sh*0.22, pectX + pw*0.5, pectY);
-        ctx.quadraticCurveTo(pectX + pw*0.4, pectY + sh*0.22, pectX + pw*0.05, pectY);
-        ctx.fill();
-        // Wing feather lines
-        ctx.strokeStyle = "rgba(140,110,40,0.45)"; ctx.lineWidth = 0.6;
-        for (let f = 1; f < 5; f++) {
-          ctx.beginPath(); ctx.moveTo(pectX - pw*0.05, pectY - sh*0.03*f); ctx.lineTo(pectX - pw*(0.1+f*0.1), pectY - sh*0.04*f); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(pectX + pw*0.05, pectY - sh*0.03*f); ctx.lineTo(pectX + pw*(0.1+f*0.1), pectY - sh*0.04*f); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(pectX - pw*0.05, pectY + sh*0.03*f); ctx.lineTo(pectX - pw*(0.1+f*0.1), pectY + sh*0.04*f); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(pectX + pw*0.05, pectY + sh*0.03*f); ctx.lineTo(pectX + pw*(0.1+f*0.1), pectY + sh*0.04*f); ctx.stroke();
-        }
-
-        // ── DECORATIVE BANDS in lower body section ─────────────────
-        // Horizontal bands of color running across the lower 55% of lid
-        const bandStartX = lx + sw * 0.53;
-        const bandW      = sw * 0.42;
-        const bodyBands  = [
-          { col: "rgba(40,72,160,0.45)", h: 0.09 },
-          { col: "rgba(194,168,107,0.30)", h: 0.05 },
-          { col: "rgba(192,48,32,0.38)", h: 0.08 },
-          { col: "rgba(194,168,107,0.28)", h: 0.04 },
-          { col: "rgba(40,72,160,0.38)", h: 0.08 },
-          { col: "rgba(194,168,107,0.28)", h: 0.04 },
-          { col: "rgba(70,120,60,0.35)", h: 0.08 },
-        ];
-        let bandY = ly + sh * 0.12;
-        for (const band of bodyBands) {
-          ctx.fillStyle = band.col;
-          ctx.fillRect(bandStartX, bandY, bandW * 0.88, sh * band.h);
-          bandY += sh * band.h + sh * 0.005;
-        }
-        // Hieroglyph column in center of lower body
-        ctx.fillStyle = "rgba(194,168,107,0.4)";
-        ctx.font = `${sh * 0.1}px serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        const bodyGlyphs = ["𓂀","𓄿","𓈖","𓊪","𓇋","𓁹","𓏏","𓂧"];
-        for (let gi = 0; gi < bodyGlyphs.length; gi++) {
-          ctx.fillText(bodyGlyphs[gi], lx + sw*0.72, ly + sh*(0.15 + gi*0.1));
-        }
-
-        // ── FEET end detail ────────────────────────────────────────
-        ctx.fillStyle = "rgba(194,168,107,0.3)";
-        ctx.fillRect(lx + sw*0.88, cy2 - sh*0.18, sw*0.08, sh*0.36);
-        ctx.strokeStyle = "rgba(194,168,107,0.4)"; ctx.lineWidth = 0.8;
-        ctx.strokeRect(lx + sw*0.88, cy2 - sh*0.18, sw*0.08, sh*0.36);
-
-        // ── lid outline / border ───────────────────────────────────
-        ctx.strokeStyle = isNear ? "#f9d342" : "rgba(194,168,107,0.6)";
-        ctx.lineWidth = isNear ? 2 : 1.2;
-        if (isNear) { ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 14; }
-        ctx.beginPath();
-        ctx.ellipse(cx2, cy2, sw*0.48, sh*0.48, 0, 0, Math.PI*2);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        ctx.restore(); // end lid translate
-
-        // ── MUMMY sits up if opened ────────────────────────────────
+        // Mummy rises from the sarcophagus when fully open
         if (obj.opened && mummySitProgress > 0) {
-          const mRise = mummySitProgress * sh * 1.8;
+          const mRise = mummySitProgress * obj.h * 3.5;
           const mummyImg = sprites.player_f0 || sprites.mummy;
           if (mummyImg && mummyImg.complete && mummyImg.naturalWidth > 0) {
-            // Use sprite instead of canvas drawing
-            const mw = sh * 0.55;
-            const mh = mw * 1.2;
+            const mw = dispW * 0.35;
+            const mh = mw * 1.25;
             ctx.save();
-            ctx.globalAlpha = Math.min(1, mummySitProgress * 2);
-            ctx.shadowColor = "rgba(255,220,100,0.5)";
-            ctx.shadowBlur = 12;
-            ctx.drawImage(mummyImg, cx2 - mw/2, cy2 - mRise - mh/2, mw, mh);
+            ctx.globalAlpha = Math.min(1, mummySitProgress * 2.5);
+            ctx.shadowColor = "rgba(255,200,80,0.7)";
+            ctx.shadowBlur = 16;
+            ctx.drawImage(mummyImg,
+              obj.x + obj.w/2 - mw/2,
+              sy - mRise - mh * 0.3,
+              mw, mh);
             ctx.shadowBlur = 0;
             ctx.restore();
-            break; // skip canvas mummy drawing below
           }
-          // Fallback canvas mummy below
-          const mRise2 = mRise; // alias for original code
-          const mCX   = cx2;
-          const mCY   = cy2 - mRise;
-          const mW    = sh * 0.55; // mummy width
-          const mH    = sh * 1.4;  // mummy height visible
+        }
 
-          ctx.save();
-          ctx.globalAlpha = Math.min(1, mummySitProgress * 2);
-
-          // Mummy body — cream linen wrapping
-          const mG = ctx.createLinearGradient(mCX - mW*0.5, 0, mCX + mW*0.5, 0);
-          mG.addColorStop(0, "#8a7850");
-          mG.addColorStop(0.3, "#c8b080");
-          mG.addColorStop(0.6, "#e0c898");
-          mG.addColorStop(1, "#a09060");
-          ctx.fillStyle = mG;
-          ctx.beginPath();
-          ctx.moveTo(mCX - mW*0.45, mCY + mH*0.5);
-          ctx.lineTo(mCX - mW*0.32, mCY - mH*0.38);
-          ctx.lineTo(mCX - mW*0.18, mCY - mH*0.5);
-          ctx.lineTo(mCX + mW*0.18, mCY - mH*0.5);
-          ctx.lineTo(mCX + mW*0.32, mCY - mH*0.38);
-          ctx.lineTo(mCX + mW*0.45, mCY + mH*0.5);
-          ctx.closePath();
-          ctx.fill();
-
-          // Horizontal wrap bands
-          ctx.strokeStyle = "rgba(100,80,40,0.45)"; ctx.lineWidth = 1.2;
-          for (let b = 1; b < 9; b++) {
-            const by2 = mCY - mH*0.5 + b * mH*0.12;
-            const bww = mW * (0.45 - b * 0.012);
-            ctx.beginPath(); ctx.moveTo(mCX - bww, by2); ctx.lineTo(mCX + bww, by2); ctx.stroke();
-          }
-          // Diagonal cross-wrapping
-          ctx.strokeStyle = "rgba(100,80,40,0.25)"; ctx.lineWidth = 0.7;
-          for (let d = 0; d < 4; d++) {
-            ctx.beginPath(); ctx.moveTo(mCX - mW*0.4 + d*mW*0.22, mCY-mH*0.5); ctx.lineTo(mCX - mW*0.15 + d*mW*0.22, mCY+mH*0.5); ctx.stroke();
-          }
-
-          // Gold death mask — the face
-          const maskCY = mCY - mH*0.4;
-          const maskR  = mW * 0.28;
-          const maskG2 = ctx.createRadialGradient(mCX - maskR*0.2, maskCY - maskR*0.2, 0, mCX, maskCY, maskR*1.3);
-          maskG2.addColorStop(0, "#f0d060");
-          maskG2.addColorStop(0.5, "#d0a830");
-          maskG2.addColorStop(1, "#906010");
-          ctx.fillStyle = maskG2;
-          ctx.beginPath(); ctx.ellipse(mCX, maskCY, maskR*0.72, maskR, 0, 0, Math.PI*2); ctx.fill();
-
-          // Nemes stripes on mask
-          const nStripeW = maskR * 0.22;
-          const stripeC2 = ["#2848a0","#c8a030","#2848a0","#c8a030"];
-          for (let ns2 = 0; ns2 < 4; ns2++) {
-            ctx.fillStyle = stripeC2[ns2]; ctx.globalAlpha = 0.65;
-            ctx.fillRect(mCX - maskR*0.72 + ns2*nStripeW, maskCY - maskR, nStripeW, maskR*0.5);
-            ctx.fillRect(mCX - maskR*0.72 + ns2*nStripeW, maskCY + maskR*0.5, nStripeW, maskR*0.5);
-          }
-          ctx.globalAlpha = Math.min(1, mummySitProgress * 2);
-
-          // Kohl eyes on mask
-          ctx.fillStyle = "#1a0e06";
-          ctx.fillRect(mCX - maskR*0.55, maskCY - maskR*0.12, maskR*0.42, maskR*0.12);
-          ctx.fillRect(mCX + maskR*0.13, maskCY - maskR*0.12, maskR*0.42, maskR*0.12);
-          // Eye shine
-          ctx.fillStyle = "#e8d090";
-          ctx.beginPath(); ctx.arc(mCX - maskR*0.32, maskCY - maskR*0.06, maskR*0.06, 0, Math.PI*2); ctx.fill();
-          ctx.beginPath(); ctx.arc(mCX + maskR*0.32, maskCY - maskR*0.06, maskR*0.06, 0, Math.PI*2); ctx.fill();
-
-          ctx.restore();
+        // Near glow when not yet opened
+        if (isNear && !obj.opened) {
+          ctx.strokeStyle = "#f9d342";
+          ctx.lineWidth = 2;
+          ctx.shadowColor = "#f9d342";
+          ctx.shadowBlur = 12;
+          ctx.strokeRect(sx - 2, sy - 2, dispW + 4, dispH + 4);
+          ctx.shadowBlur = 0;
         }
         break;
       }
@@ -1991,6 +1780,10 @@ const SPRITE_FILES = {
   rosetta_3:   'sprites/rosetta_3.png',    // lotus coin
   rosetta_4:   'sprites/rosetta_4.png',    // goose coin
   rosetta_5:   'sprites/rosetta_5.png',    // eye of horus coin
+
+  // Sarcophagus (Zombie Island sprites, isometric)
+  sarc_closed:  'sprites/sarcophagus_gold_closed.png',
+  sarc_open:    'sprites/sarcophagus_gold_open.png',
 
   // UI / backgrounds
   papyrus:     'sprites/papyrus_panel.png', // inspect panel background
