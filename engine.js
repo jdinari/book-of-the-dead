@@ -1111,7 +1111,23 @@ function drawObjects() {
 
         // ── MUMMY sits up if opened ────────────────────────────────
         if (obj.opened && mummySitProgress > 0) {
-          const mRise = mummySitProgress * sh * 1.8; // rises above the sarcophagus
+          const mRise = mummySitProgress * sh * 1.8;
+          const mummyImg = sprites.player_f0 || sprites.mummy;
+          if (mummyImg && mummyImg.complete && mummyImg.naturalWidth > 0) {
+            // Use sprite instead of canvas drawing
+            const mw = sh * 0.55;
+            const mh = mw * 1.2;
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, mummySitProgress * 2);
+            ctx.shadowColor = "rgba(255,220,100,0.5)";
+            ctx.shadowBlur = 12;
+            ctx.drawImage(mummyImg, cx2 - mw/2, cy2 - mRise - mh/2, mw, mh);
+            ctx.shadowBlur = 0;
+            ctx.restore();
+            break; // skip canvas mummy drawing below
+          }
+          // Fallback canvas mummy below
+          const mRise2 = mRise; // alias for original code
           const mCX   = cx2;
           const mCY   = cy2 - mRise;
           const mW    = sh * 0.55; // mummy width
@@ -1185,79 +1201,93 @@ function drawObjects() {
       }
 
       case "ushabti": {
-        // Sprite: Anubis-headed canopic jar figurine (32x64 native)
-        // Scale to display size — ushabti is taller than wide
-        const dispW = obj.w + 8;
-        const dispH = obj.h + 16;
+        // Seth/Anubis dark-robed ushabti figure — animated walk idle
+        // 4 frames at 32x56 each. Gently cycles between frames 0-1 (idle sway).
+        const frameIdx = Math.floor(gameTime * 1.2) % 2; // slow idle sway
+        const ushKey = `ushabti_f${frameIdx}`;
+        const ushImg = sprites[ushKey] || sprites.ushabti_f0 || sprites.ushabti;
+
+        // Scale: display at obj.w wide, proportional height (native 32x56 → ~1.75 tall)
+        const dispW = obj.w + 6;
+        const dispH = Math.round(dispW * 1.75);
         const ux = obj.x + obj.w/2 - dispW/2;
-        const uy = obj.y + obj.h/2 - dispH/2;
+        const uy = obj.y + obj.h - dispH + 4; // anchor to bottom
 
         // Drop shadow
         ctx.fillStyle = "rgba(0,0,0,0.35)";
         ctx.beginPath();
-        ctx.ellipse(obj.x + obj.w/2 + 2, obj.y + obj.h + 3, dispW*0.4, 4, 0, 0, Math.PI*2);
+        ctx.ellipse(obj.x + obj.w/2 + 1, obj.y + obj.h + 2, dispW*0.38, 3, 0, 0, Math.PI*2);
         ctx.fill();
 
-        // Draw sprite — falls back to a simple rectangle if not loaded
-        const img = sprites.ushabti;
-        if (img && img.complete && img.naturalWidth > 0) {
+        if (ushImg && ushImg.complete && ushImg.naturalWidth > 0) {
           ctx.save();
-          if (isNear) {
-            // Golden tint overlay via shadow
-            ctx.shadowColor = "#f9d342";
-            ctx.shadowBlur = 14;
-          }
-          ctx.drawImage(img, ux, uy, dispW, dispH);
+          if (isNear) { ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 16; }
+          ctx.drawImage(ushImg, ux, uy, dispW, dispH);
           ctx.shadowBlur = 0;
           ctx.restore();
         } else {
-          // Fallback: simple mummiform silhouette
-          ctx.fillStyle = "#4a6870";
+          // Fallback silhouette
+          ctx.fillStyle = "#3a3858";
           ctx.fillRect(ux, uy, dispW, dispH);
         }
 
-        // Highlight ring when near
         if (isNear) {
-          ctx.strokeStyle = "#f9d342";
-          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 1.5;
+          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 8;
           ctx.strokeRect(ux - 1, uy - 1, dispW + 2, dispH + 2);
+          ctx.shadowBlur = 0;
         }
         break;
       }
 
       case "rosetta": {
-        // Use gem sprites — each rosetta piece picks a colour by its glyph index
-        const gemKeys = ["gem_red","gem_blue","gem_red","gem_blue","gem_purple"];
+        // Hieroglyph coin sprites — each piece is a golden oval coin
         const glyphList = ["𓂀","𓄿","𓈖","𓏏","𓊪"];
-        const gemIdx = glyphList.indexOf(obj.glyph);
-        const gemKey = gemKeys[Math.max(0, gemIdx)];
-        const gemImg = sprites[gemKey];
+        const coinKeys  = ["rosetta_1","rosetta_2","rosetta_3","rosetta_4","rosetta_5"];
+        const coinIdx   = glyphList.indexOf(obj.glyph);
+        const coinKey   = coinKeys[Math.max(0, coinIdx)];
+        const coinImg   = sprites[coinKey];
 
-        // Shadow
+        // Gentle float bob
+        const floatY = Math.sin(gameTime * 1.4 + obj.x * 0.1) * 1.5;
+
+        // Glow aura
+        const auraR = obj.w * 1.8;
+        const aura = ctx.createRadialGradient(obj.x+obj.w/2, obj.y+obj.h/2+floatY, 0,
+                                               obj.x+obj.w/2, obj.y+obj.h/2+floatY, auraR);
+        aura.addColorStop(0, "rgba(220,170,50,0.22)");
+        aura.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = aura;
+        ctx.beginPath(); ctx.arc(obj.x+obj.w/2, obj.y+obj.h/2+floatY, auraR, 0, Math.PI*2); ctx.fill();
+
+        // Drop shadow
         ctx.fillStyle = "rgba(0,0,0,0.4)";
-        ctx.beginPath(); ctx.ellipse(obj.x+obj.w/2+2, obj.y+obj.h/2+2, obj.w*0.55, obj.h*0.4, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(obj.x+obj.w/2+1, obj.y+obj.h+2+floatY, obj.w*0.5, 3, 0, 0, Math.PI*2); ctx.fill();
 
-        if (gemImg && gemImg.complete && gemImg.naturalWidth > 0) {
+        if (coinImg && coinImg.complete && coinImg.naturalWidth > 0) {
           ctx.save();
-          if (isNear) { ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 12; }
-          ctx.drawImage(gemImg, obj.x, obj.y, obj.w, obj.h);
+          if (isNear) { ctx.shadowColor = "#f0d060"; ctx.shadowBlur = 14; }
+          ctx.drawImage(coinImg, obj.x, obj.y + floatY, obj.w, obj.h);
           ctx.shadowBlur = 0;
           ctx.restore();
         } else {
-          // Fallback: coloured circle
-          ctx.fillStyle = obj.color || "#c09858";
-          ctx.beginPath(); ctx.ellipse(obj.x+obj.w/2, obj.y+obj.h/2, obj.w/2, obj.h/2, 0, 0, Math.PI*2); ctx.fill();
+          // Fallback: gold oval
+          const rg = ctx.createRadialGradient(obj.x+obj.w/2-2, obj.y+obj.h/2-2+floatY, 0,
+                                               obj.x+obj.w/2, obj.y+obj.h/2+floatY, obj.w*0.6);
+          rg.addColorStop(0, "#f8e080"); rg.addColorStop(0.5, "#d4a030"); rg.addColorStop(1, "#886010");
+          ctx.fillStyle = rg;
+          ctx.beginPath(); ctx.ellipse(obj.x+obj.w/2, obj.y+obj.h/2+floatY, obj.w/2, obj.h/2, 0, 0, Math.PI*2); ctx.fill();
         }
         // Letter hint if decoded
         if (playerGlyphMap[obj.glyph]) {
-          ctx.fillStyle = "#f0e090";
-          ctx.font = `bold ${Math.min(obj.w, obj.h) * 0.55}px monospace`;
+          ctx.fillStyle = "#f8e090";
+          ctx.font = `bold ${Math.min(obj.w,obj.h)*0.6}px monospace`;
           ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText(playerGlyphMap[obj.glyph], obj.x + obj.w/2, obj.y + obj.h + 7);
+          ctx.fillText(playerGlyphMap[obj.glyph], obj.x+obj.w/2, obj.y+obj.h+8+floatY);
         }
         if (isNear) {
           ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 1.5;
-          ctx.strokeRect(obj.x-1, obj.y-1, obj.w+2, obj.h+2);
+          ctx.strokeRect(obj.x-1, obj.y-1+floatY, obj.w+2, obj.h+2);
         }
         break;
       }
@@ -1751,111 +1781,59 @@ function shadeColor(hex, pct) {
 // DRAW — PLAYER
 // =====================
 function drawPlayer() {
-  const px = player.x, py = player.y;
-  const walk = player.walkFrame;
-  const isMoving = player.isMoving;
+  // Use mummy player sprite if loaded, else fall back to canvas drawing
+  const moving = player.isMoving;
+  const frameIdx = moving ? (Math.floor(gameTime * 8) % 2) : 0;
+  const pImg = sprites[`player_f${frameIdx}`] || sprites.player_f0;
 
-  ctx.save();
+  const pw = player.size * 2.2;
+  const ph = pw * 1.2;
+  const px = player.x - pw / 2;
+  const py = player.y - ph / 2;
 
   // Shadow
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
-  ctx.beginPath(); ctx.ellipse(px + 2, py + 14, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
-
-  // Legs (walking animation)
-  if (isMoving) {
-    const legSwing = Math.sin(walk) * 5;
-    ctx.fillStyle = "#c8a870";
-    ctx.fillRect(px - 4, py + 6, 4, 10 + legSwing);
-    ctx.fillRect(px + 2, py + 6, 4, 10 - legSwing);
-  } else {
-    ctx.fillStyle = "#c8a870";
-    ctx.fillRect(px - 4, py + 6, 4, 10);
-    ctx.fillRect(px + 2, py + 6, 4, 10);
-  }
-
-  // Robe / tunic body
-  const robeGrad = ctx.createLinearGradient(px - 8, py, px + 8, py);
-  robeGrad.addColorStop(0, "#d8c898");
-  robeGrad.addColorStop(0.5, "#f0e8d0");
-  robeGrad.addColorStop(1, "#c8b880");
-  ctx.fillStyle = robeGrad;
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
   ctx.beginPath();
-  ctx.moveTo(px - 7, py + 4);
-  ctx.lineTo(px - 8, py + 8);
-  ctx.lineTo(px + 8, py + 8);
-  ctx.lineTo(px + 7, py + 4);
-  ctx.closePath();
+  ctx.ellipse(player.x, player.y + ph*0.38, pw*0.38, 4, 0, 0, Math.PI*2);
   ctx.fill();
 
-  // Arms
-  if (isMoving) {
-    const armSwing = Math.sin(walk) * 4;
-    ctx.fillStyle = "#d8c898";
-    ctx.fillRect(px - 10, py - 2 + armSwing, 4, 8);
-    ctx.fillRect(px + 6, py - 2 - armSwing, 4, 8);
-  } else {
-    ctx.fillStyle = "#d8c898";
-    ctx.fillRect(px - 10, py - 2, 4, 8);
-    ctx.fillRect(px + 6, py - 2, 4, 8);
-  }
-
-  // Head
-  const headGrad = ctx.createRadialGradient(px - 2, py - 8, 0, px, py - 7, 9);
-  headGrad.addColorStop(0, "#f0e0c0");
-  headGrad.addColorStop(0.6, "#d4b880");
-  headGrad.addColorStop(1, "#a88040");
-  ctx.fillStyle = headGrad;
-  ctx.beginPath(); ctx.arc(px, py - 7, 9, 0, Math.PI * 2); ctx.fill();
-
-  // Nemes headcloth
-  ctx.fillStyle = "#4040c0";
-  ctx.beginPath();
-  ctx.arc(px, py - 10, 8.5, Math.PI, 2 * Math.PI);
-  ctx.fill();
-  // Headdress stripe
-  ctx.fillStyle = "#f0d060";
-  ctx.fillRect(px - 8.5, py - 13, 17, 3);
-  // Side lappets
-  ctx.fillStyle = "#3838a8";
-  ctx.fillRect(px - 10, py - 11, 4, 8);
-  ctx.fillRect(px + 6, py - 11, 4, 8);
-  // Stripe on lappets
-  ctx.fillStyle = "#f0d060";
-  ctx.fillRect(px - 9, py - 9, 2, 1);
-  ctx.fillRect(px + 7, py - 9, 2, 1);
-
-  // Eyes
-  ctx.fillStyle = "#1a0e06";
-  ctx.beginPath(); ctx.arc(px - 3, py - 8, 1.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(px + 3, py - 8, 1.5, 0, Math.PI * 2); ctx.fill();
-  // Kohl lines
-  ctx.strokeStyle = "#1a0e06"; ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.moveTo(px - 5, py - 8); ctx.lineTo(px - 3, py - 8); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(px + 3, py - 8); ctx.lineTo(px + 5, py - 8); ctx.stroke();
-
-  // Held torch
-  if (player.heldItem?.type === "torch") {
-    ctx.fillStyle = "#a07830";
-    ctx.fillRect(px + 9, py - 5, 4, 14);
-    ctx.fillStyle = "#c9a24a";
-    ctx.fillRect(px + 10, py - 5, 2, 12);
+  if (pImg && pImg.complete && pImg.naturalWidth > 0) {
+    ctx.save();
+    // Torch light tint when lamp on
     if (player.lampOn) {
-      const tp = 0.8 + Math.sin(gameTime * 8) * 0.2;
-      const tFlame = ctx.createRadialGradient(px + 11, py - 10, 0, px + 11, py - 8, 10 * tp);
-      tFlame.addColorStop(0, "rgba(255,250,180,0.9)");
-      tFlame.addColorStop(0.4, "rgba(255,160,30,0.7)");
-      tFlame.addColorStop(1, "rgba(255,80,0,0)");
-      ctx.fillStyle = tFlame;
-      ctx.beginPath(); ctx.arc(px + 11, py - 9, 10 * tp, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowColor = "rgba(255,200,80,0.6)";
+      ctx.shadowBlur = 8;
     }
+    ctx.drawImage(pImg, px, py, pw, ph);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  } else {
+    // Fallback: original canvas player
+    ctx.save();
+    ctx.fillStyle = "#d4a86a";
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#8a6030"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2); ctx.stroke();
+    if (player.heldItem) {
+      ctx.fillStyle = "#f9d342";
+      ctx.beginPath(); ctx.arc(player.x + player.size * 0.7, player.y - player.size * 0.7, 4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
 
-  ctx.restore();
+  // Held item indicator (small sprite/glow above player)
+  if (player.heldItem) {
+    ctx.fillStyle = "rgba(249,211,66,0.7)";
+    ctx.beginPath();
+    ctx.arc(player.x + pw*0.4, player.y - ph*0.55, 4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 }
 
-// =====================
-// DRAW — LIGHTING
-// =====================
 function drawLighting() {
   const inCorridor = currentRoom?.id === "deep-corridor";
   const useCorridorLight = inCorridor && corridorTorchMounted;
@@ -1987,15 +1965,42 @@ function loop() {
 // =====================
 const sprites = {};
 const SPRITE_FILES = {
-  ushabti:    'sprites/ushabti_anubis.png',
-  scarab:     'sprites/scarab.png',
-  gem_red:    'sprites/gem_red.png',
-  gem_blue:   'sprites/gem_blue.png',
-  gem_purple: 'sprites/gem_purple.png',
-  ankh:       'sprites/ankh.png',
-  canopic:    'sprites/canopic_jar.png',
-  eye_of_ra:  'sprites/eye_of_ra.png',
-  brazier:    'sprites/brazier.png',
+  // Characters / figures
+  ushabti_f0:  'sprites/ushabti_f0.png',   // Seth/ushabti standing frame 0
+  ushabti_f1:  'sprites/ushabti_f1.png',   // Seth/ushabti standing frame 1
+  ushabti_f2:  'sprites/ushabti_f2.png',   // Seth/ushabti standing frame 2
+  ushabti_f3:  'sprites/ushabti_f3.png',   // Seth/ushabti standing frame 3
+  player_f0:   'sprites/player_f0.png',    // Mummy player frame 0
+  player_f1:   'sprites/player_f1.png',    // Mummy player frame 1
+  mummy:       'sprites/mummy_standing.png', // Mummy for sarcophagus
+
+  // Existing tomb items
+  ushabti:     'sprites/ushabti_anubis.png', // fallback Anubis jar
+  scarab:      'sprites/scarab.png',
+  gem_red:     'sprites/gem_red.png',
+  gem_blue:    'sprites/gem_blue.png',
+  gem_purple:  'sprites/gem_purple.png',
+  ankh:        'sprites/ankh.png',
+  canopic:     'sprites/canopic_jar.png',
+  eye_of_ra:   'sprites/eye_of_ra.png',
+  brazier:     'sprites/brazier.png',
+
+  // Rosetta coin pieces (hieroglyph coins from deben sheet)
+  rosetta_1:   'sprites/rosetta_1.png',    // ankh coin
+  rosetta_2:   'sprites/rosetta_2.png',    // heron coin
+  rosetta_3:   'sprites/rosetta_3.png',    // lotus coin
+  rosetta_4:   'sprites/rosetta_4.png',    // goose coin
+  rosetta_5:   'sprites/rosetta_5.png',    // eye of horus coin
+
+  // UI / backgrounds
+  papyrus:     'sprites/papyrus_panel.png', // inspect panel background
+
+  // Hieroglyph wall tiles (stone carved glyphs for room decoration)
+  gtile_eye:   'sprites/gtile_all_02.png',  // eye of Ra tile
+  gtile_ankh:  'sprites/gtile_all_03.png',  // ankh tile
+  gtile_horus: 'sprites/gtile_all_04.png',  // horus bird tile
+  gtile_lion:  'sprites/gtile_all_24.png',  // lion tile
+  gtile_foot:  'sprites/gtile_all_10.png',  // foot glyph tile
 };
 
 let spritesLoaded = 0;
