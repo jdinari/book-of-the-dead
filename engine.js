@@ -918,500 +918,644 @@ function drawObjects() {
     switch (obj.type) {
 
       case "sarcophagus": {
+        // Top-down view of sarcophagus lid, based on real Egyptian coffins.
+        // Lid is elongated oval/rectangular — head end at obj.x, feet at obj.x+obj.w
+        // We orient it horizontally (the game's world is top-down)
         const sw = obj.w, sh = obj.h;
-        const cx = obj.x + sw / 2;
+        const lx = obj.x, ly = obj.y;
+        const cx2 = lx + sw / 2, cy2 = ly + sh / 2;
 
-        // Shadow
+        // ── drop shadow ────────────────────────────────────────────
         ctx.fillStyle = "rgba(0,0,0,0.45)";
-        ctx.fillRect(obj.x + 5, obj.y + 5, sw, sh);
-
-        // ── SARCOPHAGUS BOX (always present) ──────────────────────
-        // Box body — painted limestone with cartouche panels
-        const boxG = ctx.createLinearGradient(obj.x, obj.y, obj.x + sw, obj.y + sh);
-        boxG.addColorStop(0,   "#5a4830");
-        boxG.addColorStop(0.3, "#7a6040");
-        boxG.addColorStop(0.7, "#6a5438");
-        boxG.addColorStop(1,   "#4a3a22");
-        ctx.fillStyle = boxG;
-        // Slightly tapered — wider at head end (left in top-down view)
         ctx.beginPath();
-        ctx.moveTo(obj.x,       obj.y + 4);
-        ctx.lineTo(obj.x + sw,  obj.y + 6);
-        ctx.lineTo(obj.x + sw,  obj.y + sh - 6);
-        ctx.lineTo(obj.x,       obj.y + sh - 4);
-        ctx.closePath();
+        ctx.ellipse(cx2 + 4, cy2 + 4, sw*0.5, sh*0.52, 0, 0, Math.PI*2);
         ctx.fill();
 
-        // Cartouche panel on body
-        ctx.fillStyle = "rgba(194,168,107,0.12)";
-        ctx.fillRect(obj.x + 24, obj.y + 8, sw - 48, sh - 16);
-        ctx.strokeStyle = "rgba(194,168,107,0.3)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(obj.x + 24, obj.y + 8, sw - 48, sh - 16);
+        // ── body box (under lid) ───────────────────────────────────
+        ctx.fillStyle = "#3a2e18";
+        ctx.beginPath();
+        ctx.ellipse(cx2, cy2, sw*0.49, sh*0.5, 0, 0, Math.PI*2);
+        ctx.fill();
 
-        // Hieroglyphs on body
-        ctx.fillStyle = "rgba(194,168,107,0.45)";
-        ctx.font = "8px serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        const glyphs = ["𓂀","𓄿","𓏏","𓇋","𓁹"];
-        for (let gi = 0; gi < glyphs.length; gi++) {
-          ctx.fillText(glyphs[gi], obj.x + 38 + gi * 10, obj.y + sh / 2);
+        // ── LID — slides left (head end) as sarcophagusLidOffset increases
+        ctx.save();
+        ctx.translate(-sarcophagusLidOffset * 0.8, -sarcophagusLidOffset * 0.2);
+
+        // Lid base color — aged cream/linen with gold tones (like image 3)
+        // or rich gold/blue for royal style (image 4)
+        const lidBase = ctx.createLinearGradient(lx, ly, lx+sw, ly+sh);
+        lidBase.addColorStop(0,    "#c8b878");
+        lidBase.addColorStop(0.15, "#e8d898");
+        lidBase.addColorStop(0.4,  "#f5edb8");
+        lidBase.addColorStop(0.65, "#e0d090");
+        lidBase.addColorStop(0.85, "#c8b870");
+        lidBase.addColorStop(1,    "#a89050");
+        ctx.fillStyle = lidBase;
+        ctx.beginPath();
+        ctx.ellipse(cx2, cy2, sw*0.48, sh*0.48, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        // ── FACE MASK — head end (left side, obj.x area) ──────────
+        // Face occupies ~top 28% of the lid length
+        const faceEndX = lx + sw * 0.28;
+        const faceCX   = lx + sw * 0.16;
+        const faceCY   = cy2;
+        const faceRX   = sh * 0.41; // half-width of face oval
+        const faceRY   = sw * 0.12; // half-height of face oval (portrait in top-down)
+
+        // Skin tone — terracotta/sandstone (image 3) or gold (image 4)
+        const faceG = ctx.createLinearGradient(faceCX - faceRX, faceCY, faceCX + faceRX, faceCY);
+        faceG.addColorStop(0, "#c09858");
+        faceG.addColorStop(0.3, "#e0b870");
+        faceG.addColorStop(0.6, "#f0ca80");
+        faceG.addColorStop(1, "#c09858");
+        ctx.fillStyle = faceG;
+        ctx.beginPath();
+        ctx.ellipse(faceCX + faceRY, faceCY, faceRX * 0.82, faceRX, Math.PI/2, 0, Math.PI*2);
+        ctx.fill();
+
+        // Kohl eye lines — the defining feature, highly stylized
+        ctx.strokeStyle = "#1a0e06"; ctx.lineWidth = sh * 0.055;
+        ctx.lineCap = "round";
+        // Left eye (top in top-down)
+        const eyeY1 = cy2 - sh * 0.16;
+        ctx.beginPath();
+        ctx.moveTo(lx + sw*0.08, eyeY1);
+        ctx.lineTo(lx + sw*0.22, eyeY1);
+        ctx.stroke();
+        // Right eye
+        const eyeY2 = cy2 + sh * 0.16;
+        ctx.beginPath();
+        ctx.moveTo(lx + sw*0.08, eyeY2);
+        ctx.lineTo(lx + sw*0.22, eyeY2);
+        ctx.stroke();
+        ctx.lineCap = "butt";
+        // Eye whites
+        ctx.fillStyle = "#e8dfc0";
+        ctx.beginPath(); ctx.ellipse(lx+sw*0.15, eyeY1, sh*0.075, sh*0.048, Math.PI/2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(lx+sw*0.15, eyeY2, sh*0.075, sh*0.048, Math.PI/2, 0, Math.PI*2); ctx.fill();
+        // Pupils
+        ctx.fillStyle = "#1a0e06";
+        ctx.beginPath(); ctx.arc(lx+sw*0.15, eyeY1, sh*0.028, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(lx+sw*0.15, eyeY2, sh*0.028, 0, Math.PI*2); ctx.fill();
+
+        // ── NEMES HEADDRESS — striped bands flanking face ──────────
+        // In top-down view: stripes run perpendicular to the lid axis
+        // Blue and gold alternating bands (images 3 & 4)
+        const nemesStartX = lx + sw * 0.02;
+        const nemesEndX   = lx + sw * 0.30;
+        const stripeColors = ["#2848a0","#c8a030","#2848a0","#c8a030","#2848a0","#c8a030","#2848a0","#c8a030","#d8c878"];
+        const stripeW = (nemesEndX - nemesStartX) / stripeColors.length;
+        for (let si = 0; si < stripeColors.length; si++) {
+          const sx = nemesStartX + si * stripeW;
+          // Clip to lid ellipse region
+          ctx.fillStyle = stripeColors[si];
+          ctx.globalAlpha = 0.65;
+          // Top half stripe
+          ctx.fillRect(sx, ly + sh*0.02, stripeW + 0.5, sh * 0.35);
+          // Bottom half stripe
+          ctx.fillRect(sx, ly + sh * 0.63, stripeW + 0.5, sh * 0.35);
+          ctx.globalAlpha = 1;
+        }
+        // Gold border on nemes
+        ctx.strokeStyle = "rgba(194,168,107,0.5)"; ctx.lineWidth = 0.5;
+        for (let si = 0; si < stripeColors.length; si++) {
+          const sx = nemesStartX + si * stripeW;
+          ctx.beginPath(); ctx.moveTo(sx, ly + sh*0.02); ctx.lineTo(sx, ly + sh*0.37); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(sx, ly + sh*0.63); ctx.lineTo(sx, ly + sh*0.98); ctx.stroke();
         }
 
-        // Foot end ornament
-        ctx.fillStyle = "rgba(194,168,107,0.2)";
-        ctx.fillRect(obj.x + sw - 18, obj.y + 4, 12, sh - 8);
-
-        // ── MUMMY (sits up if opened) ──────────────────────────────
-        if (obj.opened && mummySitProgress > 0) {
-          const sitAngle = (mummySitProgress * Math.PI * 0.45); // 0 → ~80deg lean
-          const mummyH = sh * 2.2;
-          ctx.save();
-          ctx.translate(cx - sw * 0.1, obj.y + sh * 0.5);
-          ctx.rotate(-sitAngle);
-          // Wrapping body
-          const mbg = ctx.createLinearGradient(-sw * 0.3, -mummyH, sw * 0.3, 0);
-          mbg.addColorStop(0, "#d8c898");
-          mbg.addColorStop(0.4, "#c0ac80");
-          mbg.addColorStop(1, "#a09060");
-          ctx.fillStyle = mbg;
+        // ── USEKH COLLAR below face ────────────────────────────────
+        const collarX = lx + sw * 0.25;
+        const collarW = sw * 0.16;
+        // Concentric arc bands
+        const colColors = ["#2848a0","#c8a030","#c03020","#2848a0","#c8a030"];
+        for (let ci = 0; ci < colColors.length; ci++) {
+          ctx.strokeStyle = colColors[ci];
+          ctx.lineWidth = sh * 0.042;
+          ctx.globalAlpha = 0.7;
           ctx.beginPath();
-          ctx.moveTo(-sw * 0.28, 0);
-          ctx.lineTo(-sw * 0.18, -mummyH * 0.85);
-          ctx.lineTo(-sw * 0.1,  -mummyH);
-          ctx.lineTo(sw * 0.1,   -mummyH);
-          ctx.lineTo(sw * 0.18,  -mummyH * 0.85);
-          ctx.lineTo(sw * 0.28,  0);
+          ctx.arc(collarX, cy2, sh*(0.18 + ci*0.055), -Math.PI*0.55, Math.PI*0.55);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+
+        // ── WINGED VULTURE / SCARAB PECTORAL in upper body section ──
+        const pectX = lx + sw * 0.42;
+        const pectY = cy2;
+        const pw    = sh * 0.38;
+        // Wings spread horizontally across the lid
+        ctx.fillStyle = "rgba(194,168,107,0.5)";
+        ctx.beginPath();
+        ctx.moveTo(pectX - pw*0.05, pectY);
+        ctx.quadraticCurveTo(pectX - pw*0.4, pectY - sh*0.22, pectX - pw*0.5, pectY);
+        ctx.quadraticCurveTo(pectX - pw*0.4, pectY + sh*0.22, pectX - pw*0.05, pectY);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(pectX + pw*0.05, pectY);
+        ctx.quadraticCurveTo(pectX + pw*0.4, pectY - sh*0.22, pectX + pw*0.5, pectY);
+        ctx.quadraticCurveTo(pectX + pw*0.4, pectY + sh*0.22, pectX + pw*0.05, pectY);
+        ctx.fill();
+        // Wing feather lines
+        ctx.strokeStyle = "rgba(140,110,40,0.45)"; ctx.lineWidth = 0.6;
+        for (let f = 1; f < 5; f++) {
+          ctx.beginPath(); ctx.moveTo(pectX - pw*0.05, pectY - sh*0.03*f); ctx.lineTo(pectX - pw*(0.1+f*0.1), pectY - sh*0.04*f); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(pectX + pw*0.05, pectY - sh*0.03*f); ctx.lineTo(pectX + pw*(0.1+f*0.1), pectY - sh*0.04*f); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(pectX - pw*0.05, pectY + sh*0.03*f); ctx.lineTo(pectX - pw*(0.1+f*0.1), pectY + sh*0.04*f); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(pectX + pw*0.05, pectY + sh*0.03*f); ctx.lineTo(pectX + pw*(0.1+f*0.1), pectY + sh*0.04*f); ctx.stroke();
+        }
+
+        // ── DECORATIVE BANDS in lower body section ─────────────────
+        // Horizontal bands of color running across the lower 55% of lid
+        const bandStartX = lx + sw * 0.53;
+        const bandW      = sw * 0.42;
+        const bodyBands  = [
+          { col: "rgba(40,72,160,0.45)", h: 0.09 },
+          { col: "rgba(194,168,107,0.30)", h: 0.05 },
+          { col: "rgba(192,48,32,0.38)", h: 0.08 },
+          { col: "rgba(194,168,107,0.28)", h: 0.04 },
+          { col: "rgba(40,72,160,0.38)", h: 0.08 },
+          { col: "rgba(194,168,107,0.28)", h: 0.04 },
+          { col: "rgba(70,120,60,0.35)", h: 0.08 },
+        ];
+        let bandY = ly + sh * 0.12;
+        for (const band of bodyBands) {
+          ctx.fillStyle = band.col;
+          ctx.fillRect(bandStartX, bandY, bandW * 0.88, sh * band.h);
+          bandY += sh * band.h + sh * 0.005;
+        }
+        // Hieroglyph column in center of lower body
+        ctx.fillStyle = "rgba(194,168,107,0.4)";
+        ctx.font = `${sh * 0.1}px serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const bodyGlyphs = ["𓂀","𓄿","𓈖","𓊪","𓇋","𓁹","𓏏","𓂧"];
+        for (let gi = 0; gi < bodyGlyphs.length; gi++) {
+          ctx.fillText(bodyGlyphs[gi], lx + sw*0.72, ly + sh*(0.15 + gi*0.1));
+        }
+
+        // ── FEET end detail ────────────────────────────────────────
+        ctx.fillStyle = "rgba(194,168,107,0.3)";
+        ctx.fillRect(lx + sw*0.88, cy2 - sh*0.18, sw*0.08, sh*0.36);
+        ctx.strokeStyle = "rgba(194,168,107,0.4)"; ctx.lineWidth = 0.8;
+        ctx.strokeRect(lx + sw*0.88, cy2 - sh*0.18, sw*0.08, sh*0.36);
+
+        // ── lid outline / border ───────────────────────────────────
+        ctx.strokeStyle = isNear ? "#f9d342" : "rgba(194,168,107,0.6)";
+        ctx.lineWidth = isNear ? 2 : 1.2;
+        if (isNear) { ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 14; }
+        ctx.beginPath();
+        ctx.ellipse(cx2, cy2, sw*0.48, sh*0.48, 0, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        ctx.restore(); // end lid translate
+
+        // ── MUMMY sits up if opened ────────────────────────────────
+        if (obj.opened && mummySitProgress > 0) {
+          const mRise = mummySitProgress * sh * 1.8; // rises above the sarcophagus
+          const mCX   = cx2;
+          const mCY   = cy2 - mRise;
+          const mW    = sh * 0.55; // mummy width
+          const mH    = sh * 1.4;  // mummy height visible
+
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, mummySitProgress * 2);
+
+          // Mummy body — cream linen wrapping
+          const mG = ctx.createLinearGradient(mCX - mW*0.5, 0, mCX + mW*0.5, 0);
+          mG.addColorStop(0, "#8a7850");
+          mG.addColorStop(0.3, "#c8b080");
+          mG.addColorStop(0.6, "#e0c898");
+          mG.addColorStop(1, "#a09060");
+          ctx.fillStyle = mG;
+          ctx.beginPath();
+          ctx.moveTo(mCX - mW*0.45, mCY + mH*0.5);
+          ctx.lineTo(mCX - mW*0.32, mCY - mH*0.38);
+          ctx.lineTo(mCX - mW*0.18, mCY - mH*0.5);
+          ctx.lineTo(mCX + mW*0.18, mCY - mH*0.5);
+          ctx.lineTo(mCX + mW*0.32, mCY - mH*0.38);
+          ctx.lineTo(mCX + mW*0.45, mCY + mH*0.5);
           ctx.closePath();
           ctx.fill();
-          // Wrap band lines
-          ctx.strokeStyle = "rgba(160,130,80,0.5)";
-          ctx.lineWidth = 1;
-          for (let b = 1; b < 7; b++) {
-            const by = -mummyH * (b / 7.5);
-            const bw = sw * 0.28 * (1 - b / 12);
-            ctx.beginPath(); ctx.moveTo(-bw, by); ctx.lineTo(bw, by); ctx.stroke();
+
+          // Horizontal wrap bands
+          ctx.strokeStyle = "rgba(100,80,40,0.45)"; ctx.lineWidth = 1.2;
+          for (let b = 1; b < 9; b++) {
+            const by2 = mCY - mH*0.5 + b * mH*0.12;
+            const bww = mW * (0.45 - b * 0.012);
+            ctx.beginPath(); ctx.moveTo(mCX - bww, by2); ctx.lineTo(mCX + bww, by2); ctx.stroke();
           }
-          // Gold death mask face
-          const faceR = sw * 0.22;
-          const faceY = -mummyH + faceR * 0.6;
-          const fg = ctx.createRadialGradient(0, faceY, 0, 0, faceY, faceR * 1.4);
-          fg.addColorStop(0, "#e8c870");
-          fg.addColorStop(0.6, "#c8a850");
-          fg.addColorStop(1, "#a08030");
-          ctx.fillStyle = fg;
-          ctx.beginPath();
-          ctx.ellipse(0, faceY, faceR * 0.75, faceR, 0, 0, Math.PI * 2);
-          ctx.fill();
-          // Nemes stripe
-          ctx.strokeStyle = "rgba(30,15,5,0.5)";
-          ctx.lineWidth = 0.8;
-          for (let s = 0; s < 4; s++) {
-            ctx.beginPath();
-            ctx.moveTo(-faceR * 0.8, faceY - faceR * 0.3 + s * faceR * 0.2);
-            ctx.lineTo(faceR * 0.8, faceY - faceR * 0.3 + s * faceR * 0.2);
-            ctx.stroke();
+          // Diagonal cross-wrapping
+          ctx.strokeStyle = "rgba(100,80,40,0.25)"; ctx.lineWidth = 0.7;
+          for (let d = 0; d < 4; d++) {
+            ctx.beginPath(); ctx.moveTo(mCX - mW*0.4 + d*mW*0.22, mCY-mH*0.5); ctx.lineTo(mCX - mW*0.15 + d*mW*0.22, mCY+mH*0.5); ctx.stroke();
           }
-          // Eyes — dark kohl lines
-          ctx.fillStyle = "#1a0e04";
-          ctx.fillRect(-faceR * 0.42, faceY - faceR * 0.12, faceR * 0.3, faceR * 0.12);
-          ctx.fillRect(faceR * 0.12, faceY - faceR * 0.12, faceR * 0.3, faceR * 0.12);
-          // Uraeus (cobra) on forehead
-          ctx.fillStyle = "#c03020";
-          ctx.beginPath();
-          ctx.arc(0, faceY - faceR * 0.65, faceR * 0.12, 0, Math.PI * 2);
-          ctx.fill();
+
+          // Gold death mask — the face
+          const maskCY = mCY - mH*0.4;
+          const maskR  = mW * 0.28;
+          const maskG2 = ctx.createRadialGradient(mCX - maskR*0.2, maskCY - maskR*0.2, 0, mCX, maskCY, maskR*1.3);
+          maskG2.addColorStop(0, "#f0d060");
+          maskG2.addColorStop(0.5, "#d0a830");
+          maskG2.addColorStop(1, "#906010");
+          ctx.fillStyle = maskG2;
+          ctx.beginPath(); ctx.ellipse(mCX, maskCY, maskR*0.72, maskR, 0, 0, Math.PI*2); ctx.fill();
+
+          // Nemes stripes on mask
+          const nStripeW = maskR * 0.22;
+          const stripeC2 = ["#2848a0","#c8a030","#2848a0","#c8a030"];
+          for (let ns2 = 0; ns2 < 4; ns2++) {
+            ctx.fillStyle = stripeC2[ns2]; ctx.globalAlpha = 0.65;
+            ctx.fillRect(mCX - maskR*0.72 + ns2*nStripeW, maskCY - maskR, nStripeW, maskR*0.5);
+            ctx.fillRect(mCX - maskR*0.72 + ns2*nStripeW, maskCY + maskR*0.5, nStripeW, maskR*0.5);
+          }
+          ctx.globalAlpha = Math.min(1, mummySitProgress * 2);
+
+          // Kohl eyes on mask
+          ctx.fillStyle = "#1a0e06";
+          ctx.fillRect(mCX - maskR*0.55, maskCY - maskR*0.12, maskR*0.42, maskR*0.12);
+          ctx.fillRect(mCX + maskR*0.13, maskCY - maskR*0.12, maskR*0.42, maskR*0.12);
+          // Eye shine
+          ctx.fillStyle = "#e8d090";
+          ctx.beginPath(); ctx.arc(mCX - maskR*0.32, maskCY - maskR*0.06, maskR*0.06, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(mCX + maskR*0.32, maskCY - maskR*0.06, maskR*0.06, 0, Math.PI*2); ctx.fill();
+
           ctx.restore();
-        }
-
-        // ── LID (slides sideways when opened) ─────────────────────
-        const lidX = obj.x - sarcophagusLidOffset;
-        // Lid body — more ornate than the box
-        const lidG = ctx.createLinearGradient(lidX, obj.y, lidX + sw, obj.y + sh);
-        lidG.addColorStop(0,   "#b09060");
-        lidG.addColorStop(0.25,"#d4b070");
-        lidG.addColorStop(0.5, "#e8c878");
-        lidG.addColorStop(0.75,"#c8a858");
-        lidG.addColorStop(1,   "#907040");
-        ctx.fillStyle = lidG;
-        ctx.beginPath();
-        ctx.moveTo(lidX,        obj.y + 3);
-        ctx.lineTo(lidX + sw,   obj.y + 5);
-        ctx.lineTo(lidX + sw,   obj.y + sh - 5);
-        ctx.lineTo(lidX,        obj.y + sh - 3);
-        ctx.closePath();
-        ctx.fill();
-
-        // Raised center ridge
-        ctx.fillStyle = "rgba(255,230,140,0.25)";
-        ctx.fillRect(lidX + sw * 0.28, obj.y + 2, sw * 0.44, sh - 4);
-
-        // Face mask on lid
-        const lidCx = lidX + sw * 0.25;
-        const lidCy = obj.y + sh / 2;
-        // Oval face
-        ctx.fillStyle = "#ddc070";
-        ctx.beginPath();
-        ctx.ellipse(lidCx, lidCy, sw * 0.12, sh * 0.38, 0, 0, Math.PI * 2);
-        ctx.fill();
-        // Kohl eyes
-        ctx.fillStyle = "#1a0e04";
-        ctx.beginPath(); ctx.ellipse(lidCx - sw*0.05, lidCy - sh*0.06, sw*0.035, sh*0.055, 0, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(lidCx + sw*0.05, lidCy - sh*0.06, sw*0.035, sh*0.055, 0, 0, Math.PI*2); ctx.fill();
-        // Eye liner
-        ctx.strokeStyle = "#1a0e04"; ctx.lineWidth = 0.8;
-        ctx.beginPath(); ctx.moveTo(lidCx - sw*0.1, lidCy - sh*0.06); ctx.lineTo(lidCx - sw*0.04, lidCy - sh*0.06); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(lidCx + sw*0.04, lidCy - sh*0.06); ctx.lineTo(lidCx + sw*0.1, lidCy - sh*0.06); ctx.stroke();
-        // Nose + mouth
-        ctx.fillStyle = "#b89050";
-        ctx.beginPath(); ctx.ellipse(lidCx, lidCy + sh*0.04, sw*0.02, sh*0.025, 0, 0, Math.PI*2); ctx.fill();
-        ctx.strokeStyle = "#8a6830"; ctx.lineWidth = 0.8;
-        ctx.beginPath(); ctx.moveTo(lidCx - sw*0.04, lidCy + sh*0.13); ctx.quadraticCurveTo(lidCx, lidCy + sh*0.16, lidCx + sw*0.04, lidCy + sh*0.13); ctx.stroke();
-        // Nemes headdress stripes
-        ctx.strokeStyle = "rgba(80,60,20,0.4)"; ctx.lineWidth = 0.7;
-        for (let ns = 0; ns < 5; ns++) {
-          const ny = lidCy - sh*0.35 + ns * sh*0.08;
-          ctx.beginPath(); ctx.moveTo(lidCx - sw*0.12, ny); ctx.lineTo(lidCx + sw*0.12, ny); ctx.stroke();
-        }
-        // Cartouche band down center of lid
-        ctx.fillStyle = "rgba(194,168,107,0.15)";
-        ctx.fillRect(lidX + sw*0.42, obj.y + 4, sw*0.2, sh - 8);
-        ctx.strokeStyle = "rgba(194,168,107,0.25)"; ctx.lineWidth = 0.8;
-        ctx.strokeRect(lidX + sw*0.42, obj.y + 4, sw*0.2, sh - 8);
-        // Glyphs on lid cartouche
-        ctx.fillStyle = "rgba(194,168,107,0.5)";
-        ctx.font = "7px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        for (let gi = 0; gi < 3; gi++) {
-          ctx.fillText(["𓄿","𓈖","𓊪"][gi], lidX + sw*0.52, obj.y + 10 + gi*8);
-        }
-        // Lid border
-        ctx.strokeStyle = isNear ? "#f9d342" : "#c8a840"; ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(lidX,      obj.y + 3);
-        ctx.lineTo(lidX + sw, obj.y + 5);
-        ctx.lineTo(lidX + sw, obj.y + sh - 5);
-        ctx.lineTo(lidX,      obj.y + sh - 3);
-        ctx.closePath(); ctx.stroke();
-        // Glow if near
-        if (isNear) {
-          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 14;
-          ctx.strokeStyle = "#f9d342";
-          ctx.stroke();
-          ctx.shadowBlur = 0;
         }
         break;
       }
 
       case "ushabti": {
-        // Egyptian god-headed figurines
-        const ux = obj.x + obj.w / 2;
-        const uy = obj.y + obj.h;
+        // Mummiform body with god head — based on real faience ushabtis
+        // Body is a tapered cone: wide shoulders, narrow at flat base
         const god = obj.god || "generic";
+        const bx  = obj.x + obj.w / 2;       // center x
+        const by  = obj.y + obj.h;            // bottom y
+        const bw  = obj.w;                    // shoulder width
+        const bh  = obj.h;                    // full height (body only, head is extra)
+        const headR = bw * 0.52;              // head radius
 
-        // Shadow
-        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        // ── colour palette per god (worn faience / stone tones) ──────
+        const palette = {
+          anubis:   { body: "#3a3028", hi: "#5a4a3a", shadow: "#1e180e", head: "#1a1208", headHi: "#2e2418" },
+          thoth:    { body: "#2a4038", hi: "#406050", shadow: "#182820", head: "#d8c8a0", headHi: "#f0e0b8" },
+          horus:    { body: "#2a2820", hi: "#4a4030", shadow: "#181408", head: "#1a1410", headHi: "#302818" },
+          osiris:   { body: "#3a6048", hi: "#508860", shadow: "#1e3828", head: "#3a6048", headHi: "#5a8868" },
+          sekhmet:  { body: "#4a6070", hi: "#688898", shadow: "#283848", head: "#c89870", headHi: "#e0b888" },
+          hathor:   { body: "#4a6070", hi: "#688898", shadow: "#283848", head: "#d8a870", headHi: "#f0c888" },
+          ra:       { body: "#4a5838", hi: "#687850", shadow: "#283018", head: "#c89830", headHi: "#e0b840" },
+          sobek:    { body: "#3a5030", hi: "#507048", shadow: "#202e18", head: "#508840", headHi: "#70a858" },
+          nephthys: { body: "#38405a", hi: "#505878", shadow: "#202838", head: "#c8a0d0", headHi: "#e0c0e8" },
+          ptah:     { body: "#283858", hi: "#384878", shadow: "#101828", head: "#283858", headHi: "#486898" },
+          generic:  { body: "#4a6870", hi: "#688898", shadow: "#283848", head: "#4a6870", headHi: "#6888a0" },
+        };
+        const pal = palette[god] || palette.generic;
+
+        // ── drop shadow ───────────────────────────────────────────────
+        ctx.fillStyle = "rgba(0,0,0,0.38)";
         ctx.beginPath();
-        ctx.ellipse(ux + 1, uy + 2, obj.w / 1.4, 3, 0, 0, Math.PI * 2);
+        ctx.ellipse(bx + 2, by + 2, bw * 0.55, 4, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Body — faience blue/green glaze with mummiform wrapping
-        const bodyG = ctx.createLinearGradient(obj.x, obj.y + 8, obj.x + obj.w, obj.y + 8);
-        const baseCol = { anubis:"#3a4855", thoth:"#2a5548", horus:"#2a4838", osiris:"#1a4030",
-                          sekhmet:"#5a3028", hathor:"#5a3048", ra:"#5a4010", sobek:"#2a4820",
-                          nephthys:"#3a3858", ptah:"#203858", generic:"#404858" }[god] || "#404858";
-        const hiCol  = { anubis:"#607a90", thoth:"#4a8870", horus:"#4a7860", osiris:"#3a7060",
-                          sekhmet:"#906050", hathor:"#906070", ra:"#907030", sobek:"#4a7840",
-                          nephthys:"#606888", ptah:"#506888", generic:"#607080" }[god] || "#607080";
-        bodyG.addColorStop(0, baseCol);
-        bodyG.addColorStop(0.45, hiCol);
-        bodyG.addColorStop(1, baseCol);
+        // ── mummiform body ────────────────────────────────────────────
+        // Shape: shoulders at top ~bw wide, tapers to ~bw*0.55 at base
+        // Top of body starts at obj.y + bh*0.28 (head sits above)
+        const bodyTop = obj.y + bh * 0.28;
+        const bodyBot = by - 4; // just above base plinth
+
+        ctx.save();
+        // Body fill — linear gradient left→right for slight roundness
+        const bodyG = ctx.createLinearGradient(bx - bw*0.5, 0, bx + bw*0.5, 0);
+        bodyG.addColorStop(0,    pal.shadow);
+        bodyG.addColorStop(0.25, pal.body);
+        bodyG.addColorStop(0.55, pal.hi);
+        bodyG.addColorStop(0.8,  pal.body);
+        bodyG.addColorStop(1,    pal.shadow);
         ctx.fillStyle = bodyG;
-        // Mummiform shape — slightly tapered
+
         ctx.beginPath();
-        ctx.moveTo(ux - obj.w*0.48, uy);
-        ctx.lineTo(ux - obj.w*0.32, obj.y + 10);
-        ctx.lineTo(ux - obj.w*0.2,  obj.y + 2);
-        ctx.lineTo(ux + obj.w*0.2,  obj.y + 2);
-        ctx.lineTo(ux + obj.w*0.32, obj.y + 10);
-        ctx.lineTo(ux + obj.w*0.48, uy);
+        // Shoulder line at top of body
+        ctx.moveTo(bx - bw*0.5,  bodyTop);
+        // Left side tapers inward to base
+        ctx.lineTo(bx - bw*0.28, bodyBot);
+        // Base corners
+        ctx.lineTo(bx + bw*0.28, bodyBot);
+        // Right side
+        ctx.lineTo(bx + bw*0.5,  bodyTop);
         ctx.closePath();
         ctx.fill();
 
-        // Wrap lines
-        ctx.strokeStyle = "rgba(20,30,40,0.35)"; ctx.lineWidth = 0.8;
-        for (let i = 1; i < 5; i++) {
-          const ly = obj.y + 10 + i * (obj.h * 0.16);
-          const lw = obj.w * 0.42 * (1 - i * 0.06);
-          ctx.beginPath(); ctx.moveTo(ux - lw, ly); ctx.lineTo(ux + lw, ly); ctx.stroke();
+        // ── crossed arms / fists at chest level ───────────────────────
+        const chestY = bodyTop + bh * 0.18;
+        // Left fist
+        ctx.fillStyle = pal.hi;
+        ctx.beginPath(); ctx.ellipse(bx - bw*0.22, chestY, bw*0.13, bw*0.1, -0.3, 0, Math.PI*2); ctx.fill();
+        // Right fist
+        ctx.beginPath(); ctx.ellipse(bx + bw*0.18, chestY, bw*0.13, bw*0.1, 0.3, 0, Math.PI*2); ctx.fill();
+        // Crossed arm lines
+        ctx.strokeStyle = pal.shadow; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(bx - bw*0.32, chestY - bw*0.05); ctx.lineTo(bx + bw*0.28, chestY + bw*0.05); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx + bw*0.32, chestY - bw*0.05); ctx.lineTo(bx - bw*0.28, chestY + bw*0.05); ctx.stroke();
+
+        // ── usekh collar ─────────────────────────────────────────────
+        const collarY = bodyTop + bh * 0.06;
+        ctx.strokeStyle = "rgba(194,168,107,0.55)"; ctx.lineWidth = 1;
+        for (let c = 0; c < 3; c++) {
+          const cr = bw * (0.28 + c * 0.06);
+          ctx.beginPath();
+          ctx.arc(bx, collarY, cr, Math.PI * 0.15, Math.PI * 0.85);
+          ctx.stroke();
         }
 
-        // Crossed arms — painted gold bands
-        ctx.strokeStyle = "rgba(194,168,107,0.45)"; ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(ux - obj.w*0.3, obj.y + 14);
-        ctx.lineTo(ux + obj.w*0.05, obj.y + 20);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(ux + obj.w*0.3, obj.y + 14);
-        ctx.lineTo(ux - obj.w*0.05, obj.y + 20);
-        ctx.stroke();
+        // ── hieroglyph column down the front ─────────────────────────
+        const colX = bx - bw * 0.08;
+        const colW = bw * 0.18;
+        const colTop2 = chestY + bh * 0.08;
+        const colBot2 = bodyBot - bh * 0.04;
+        ctx.fillStyle = "rgba(0,0,0,0.18)";
+        ctx.fillRect(colX, colTop2, colW, colBot2 - colTop2);
+        ctx.strokeStyle = "rgba(194,168,107,0.2)"; ctx.lineWidth = 0.5;
+        ctx.strokeRect(colX, colTop2, colW, colBot2 - colTop2);
+        // Mini glyphs
+        ctx.fillStyle = "rgba(194,168,107,0.45)";
+        ctx.font = `${bw * 0.14}px serif`; ctx.textAlign = "center"; ctx.textBaseline = "top";
+        const glyphCol = ["𓄿","𓈖","𓊪","𓇋","𓁹","𓏏","𓂧"];
+        const glyphStep = (colBot2 - colTop2) / 7;
+        for (let gi = 0; gi < 7; gi++) {
+          ctx.fillText(glyphCol[gi], bx, colTop2 + gi * glyphStep);
+        }
 
-        // Hieroglyph on chest (god-specific)
-        const godGlyph = { anubis:"𓀭", thoth:"𓁶", horus:"𓅃", osiris:"𓀦",
-                           sekhmet:"𓁐", hathor:"𓁡", ra:"𓇳", sobek:"𓆈",
-                           nephthys:"𓁢", ptah:"𓀠", generic:"𓁹" }[god] || "𓁹";
-        ctx.fillStyle = isNear ? "rgba(249,211,66,0.8)" : "rgba(194,168,107,0.6)";
-        ctx.font = `${obj.h * 0.26}px serif`;
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(godGlyph, ux, obj.y + obj.h * 0.58);
+        // ── base plinth ───────────────────────────────────────────────
+        ctx.fillStyle = pal.shadow;
+        ctx.fillRect(bx - bw*0.38, bodyBot, bw*0.76, 5);
+        ctx.fillStyle = pal.body;
+        ctx.fillRect(bx - bw*0.34, bodyBot, bw*0.68, 3);
+        ctx.restore();
 
-        // ── GOD HEAD ─────────────────────────────────────────────
-        const hcx = ux;
-        const hcy = obj.y + 3;
-        const hr  = obj.w * 0.55;
+        // ── GOD HEAD ─────────────────────────────────────────────────
+        // Sits centered at top of body, with nemes headdress falling
+        // down the sides like the real objects in the reference photos
+        const headCX = bx;
+        const headCY = obj.y + bh * 0.18; // center of head
+
+        ctx.save();
+
+        // Nemes headdress — two hanging panels either side of the face
+        // (falls from top of head down past the shoulders)
+        const nemesCol = isNear ? "rgba(249,211,66,0.5)" : "rgba(194,168,107,0.35)";
+        // Left panel
+        ctx.fillStyle = nemesCol;
+        ctx.beginPath();
+        ctx.moveTo(headCX - headR * 0.5, headCY - headR * 0.6);
+        ctx.lineTo(headCX - headR * 0.85, headCY + headR * 0.2);
+        ctx.lineTo(headCX - bw*0.45, bodyTop + bh*0.06);
+        ctx.lineTo(headCX - bw*0.4, bodyTop);
+        ctx.lineTo(headCX - headR * 0.3, headCY + headR * 0.1);
+        ctx.closePath(); ctx.fill();
+        // Right panel
+        ctx.beginPath();
+        ctx.moveTo(headCX + headR * 0.5, headCY - headR * 0.6);
+        ctx.lineTo(headCX + headR * 0.85, headCY + headR * 0.2);
+        ctx.lineTo(headCX + bw*0.45, bodyTop + bh*0.06);
+        ctx.lineTo(headCX + bw*0.4, bodyTop);
+        ctx.lineTo(headCX + headR * 0.3, headCY + headR * 0.1);
+        ctx.closePath(); ctx.fill();
+        // Nemes stripes
+        ctx.strokeStyle = "rgba(140,110,50,0.4)"; ctx.lineWidth = 0.7;
+        for (let ns = 0; ns < 4; ns++) {
+          const ny = headCY - headR*0.55 + ns * headR * 0.28;
+          ctx.beginPath(); ctx.moveTo(headCX - headR*0.85, ny); ctx.lineTo(headCX - headR*0.3, ny + headR*0.1); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(headCX + headR*0.85, ny); ctx.lineTo(headCX + headR*0.3, ny + headR*0.1); ctx.stroke();
+        }
 
         if (god === "anubis") {
-          // Jackal head — tall pointed ears, long snout
-          ctx.fillStyle = "#1a1510";
-          // Snout
+          // Sleek black jackal head — smooth elongated snout, tall ears
+          ctx.fillStyle = pal.head;
+          // Cranium
+          ctx.beginPath(); ctx.ellipse(headCX, headCY - headR*0.1, headR*0.55, headR*0.52, 0, 0, Math.PI*2); ctx.fill();
+          // Pointed muzzle — angled downward
           ctx.beginPath();
-          ctx.moveTo(hcx - hr*0.3, hcy + hr*0.2);
-          ctx.lineTo(hcx - hr*0.5, hcy + hr*0.6);
-          ctx.lineTo(hcx + hr*0.5, hcy + hr*0.6);
-          ctx.lineTo(hcx + hr*0.3, hcy + hr*0.2);
-          ctx.closePath(); ctx.fill();
-          // Head
-          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.65, hr*0.55, 0, 0, Math.PI*2); ctx.fill();
+          ctx.moveTo(headCX - headR*0.38, headCY + headR*0.1);
+          ctx.lineTo(headCX - headR*0.55, headCY + headR*0.65);
+          ctx.lineTo(headCX,             headCY + headR*0.72);
+          ctx.lineTo(headCX + headR*0.55, headCY + headR*0.65);
+          ctx.lineTo(headCX + headR*0.38, headCY + headR*0.1);
+          ctx.fill();
           // Tall pointed ears
-          ctx.beginPath(); ctx.moveTo(hcx-hr*0.4, hcy-hr*0.3); ctx.lineTo(hcx-hr*0.6, hcy-hr*1.1); ctx.lineTo(hcx-hr*0.15, hcy-hr*0.3); ctx.fill();
-          ctx.beginPath(); ctx.moveTo(hcx+hr*0.4, hcy-hr*0.3); ctx.lineTo(hcx+hr*0.6, hcy-hr*1.1); ctx.lineTo(hcx+hr*0.15, hcy-hr*0.3); ctx.fill();
-          // Inner ear
-          ctx.fillStyle = "#4a2018";
-          ctx.beginPath(); ctx.moveTo(hcx-hr*0.38, hcy-hr*0.35); ctx.lineTo(hcx-hr*0.52, hcy-hr*0.95); ctx.lineTo(hcx-hr*0.22, hcy-hr*0.35); ctx.fill();
-          ctx.beginPath(); ctx.moveTo(hcx+hr*0.38, hcy-hr*0.35); ctx.lineTo(hcx+hr*0.52, hcy-hr*0.95); ctx.lineTo(hcx+hr*0.22, hcy-hr*0.35); ctx.fill();
-          // Gold collar
-          ctx.fillStyle = "rgba(194,168,107,0.6)";
-          ctx.fillRect(hcx - hr*0.5, hcy + hr*0.55, hr, hr*0.2);
-          // Eyes — gold
+          ctx.beginPath(); ctx.moveTo(headCX-headR*0.35, headCY-headR*0.45); ctx.lineTo(headCX-headR*0.52, headCY-headR*1.25); ctx.lineTo(headCX-headR*0.12, headCY-headR*0.55); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(headCX+headR*0.35, headCY-headR*0.45); ctx.lineTo(headCX+headR*0.52, headCY-headR*1.25); ctx.lineTo(headCX+headR*0.12, headCY-headR*0.55); ctx.fill();
+          // Highlight ridge on snout
+          ctx.fillStyle = pal.headHi;
+          ctx.beginPath(); ctx.ellipse(headCX - headR*0.08, headCY + headR*0.35, headR*0.12, headR*0.28, -0.2, 0, Math.PI*2); ctx.fill();
+          // Gold eye
           ctx.fillStyle = "#c8a030";
-          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy+hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy+hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(headCX-headR*0.28, headCY+headR*0.05, headR*0.11, headR*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(headCX+headR*0.28, headCY+headR*0.05, headR*0.11, headR*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#0a0806";
+          ctx.beginPath(); ctx.arc(headCX-headR*0.28, headCY+headR*0.05, headR*0.055, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(headCX+headR*0.28, headCY+headR*0.05, headR*0.055, 0, Math.PI*2); ctx.fill();
+
+        } else if (god === "horus" || god === "ra") {
+          // Falcon head — compact, rounded cranium, curved hooked beak facing left
+          const hc = god === "ra" ? "#1a1410" : pal.head;
+          ctx.fillStyle = hc;
+          // Round head
+          ctx.beginPath(); ctx.ellipse(headCX, headCY, headR*0.6, headR*0.58, 0, 0, Math.PI*2); ctx.fill();
+          // Hooked beak — curves down-left
+          ctx.beginPath();
+          ctx.moveTo(headCX - headR*0.18, headCY + headR*0.2);
+          ctx.quadraticCurveTo(headCX - headR*0.7, headCY + headR*0.3, headCX - headR*0.75, headCY + headR*0.65);
+          ctx.quadraticCurveTo(headCX - headR*0.55, headCY + headR*0.7, headCX - headR*0.15, headCY + headR*0.35);
+          ctx.fill();
+          // Feather markings (subtle stripes on head)
+          ctx.strokeStyle = "rgba(80,60,20,0.3)"; ctx.lineWidth = 0.6;
+          for (let f = 0; f < 4; f++) {
+            ctx.beginPath(); ctx.moveTo(headCX-headR*0.4+f*headR*0.22, headCY-headR*0.45); ctx.lineTo(headCX-headR*0.3+f*headR*0.22, headCY+headR*0.1); ctx.stroke();
+          }
+          // Eye stripe — kohl mark
+          ctx.fillStyle = pal.headHi;
+          ctx.fillRect(headCX-headR*0.55, headCY-headR*0.15, headR*0.45, headR*0.12);
+          // Eye
+          ctx.fillStyle = "#c8a030";
+          ctx.beginPath(); ctx.ellipse(headCX-headR*0.32, headCY-headR*0.08, headR*0.12, headR*0.09, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#080604";
+          ctx.beginPath(); ctx.arc(headCX-headR*0.32, headCY-headR*0.08, headR*0.058, 0, Math.PI*2); ctx.fill();
 
         } else if (god === "thoth") {
-          // Ibis head — long curved beak
-          ctx.fillStyle = "#e8e0d0";
-          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.6, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
-          // Long curved beak
-          ctx.fillStyle = "#c0780a";
+          // Ibis head — white/cream, very long curved beak downward
+          ctx.fillStyle = pal.head;
+          ctx.beginPath(); ctx.ellipse(headCX, headCY - headR*0.1, headR*0.55, headR*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Long down-curved beak
           ctx.beginPath();
-          ctx.moveTo(hcx - hr*0.25, hcy + hr*0.1);
-          ctx.quadraticCurveTo(hcx - hr*0.9, hcy + hr*0.3, hcx - hr*1.1, hcy + hr*0.9);
-          ctx.lineTo(hcx - hr*0.95, hcy + hr*0.92);
-          ctx.quadraticCurveTo(hcx - hr*0.75, hcy + hr*0.35, hcx - hr*0.1, hcy + hr*0.22);
-          ctx.closePath(); ctx.fill();
-          // Crest
-          ctx.fillStyle = "#ddd8c8";
-          ctx.beginPath(); ctx.moveTo(hcx+hr*0.1, hcy-hr*0.4); ctx.lineTo(hcx+hr*0.4, hcy-hr*1.0); ctx.lineTo(hcx+hr*0.55, hcy-hr*0.35); ctx.fill();
+          ctx.moveTo(headCX - headR*0.2, headCY + headR*0.25);
+          ctx.quadraticCurveTo(headCX - headR*0.6, headCY + headR*0.55, headCX - headR*0.5, headCY + headR*1.05);
+          ctx.quadraticCurveTo(headCX - headR*0.35, headCY + headR*1.08, headCX - headR*0.0, headCY + headR*0.42);
+          ctx.fill();
+          // Highlight on beak
+          ctx.fillStyle = pal.headHi;
+          ctx.beginPath(); ctx.ellipse(headCX + headR*0.05, headCY - headR*0.08, headR*0.38, headR*0.36, 0, 0, Math.PI*2); ctx.fill();
           // Eye
-          ctx.fillStyle = "#1a1510";
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.05, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
-          ctx.fillStyle = "#c8a030";
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.05, hr*0.05, hr*0.04, 0, 0, Math.PI*2); ctx.fill();
-
-        } else if (god === "horus") {
-          // Falcon head
-          ctx.fillStyle = "#4a3820";
-          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.62, hr*0.52, 0, 0, Math.PI*2); ctx.fill();
-          // Hooked beak
-          ctx.fillStyle = "#d08020";
-          ctx.beginPath(); ctx.moveTo(hcx-hr*0.1, hcy+hr*0.2); ctx.lineTo(hcx-hr*0.55, hcy+hr*0.55); ctx.lineTo(hcx-hr*0.35, hcy+hr*0.58); ctx.lineTo(hcx+hr*0.1, hcy+hr*0.28); ctx.fill();
-          // Eye stripe
-          ctx.fillStyle = "#1a1510";
-          ctx.fillRect(hcx-hr*0.38, hcy-hr*0.1, hr*0.3, hr*0.12);
-          ctx.fillStyle = "rgba(194,168,107,0.7)";
-          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy-hr*0.04, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
-          // Feather markings
-          ctx.strokeStyle = "rgba(80,55,20,0.35)"; ctx.lineWidth = 0.6;
-          for (let f = 0; f < 3; f++) {
-            ctx.beginPath(); ctx.moveTo(hcx+hr*(0.1+f*0.12), hcy-hr*0.4); ctx.lineTo(hcx+hr*(0.2+f*0.12), hcy+hr*0.2); ctx.stroke();
-          }
+          ctx.fillStyle = "#1a1208";
+          ctx.beginPath(); ctx.arc(headCX+headR*0.15, headCY-headR*0.1, headR*0.1, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#e8d090";
+          ctx.beginPath(); ctx.arc(headCX+headR*0.15, headCY-headR*0.1, headR*0.05, 0, Math.PI*2); ctx.fill();
 
         } else if (god === "osiris") {
-          // Green-skinned, atef crown (tall white crown with feathers)
-          ctx.fillStyle = "#3a6040";
-          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.6, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
-          // Atef crown — white tall cylinder
-          ctx.fillStyle = "#e0dcd0";
-          ctx.fillRect(hcx - hr*0.28, hcy - hr*1.2, hr*0.56, hr*1.0);
-          ctx.beginPath(); ctx.ellipse(hcx, hcy-hr*1.2, hr*0.28, hr*0.12, 0, 0, Math.PI*2); ctx.fill();
-          // Side plumes
-          ctx.fillStyle = "#c8b840";
-          ctx.beginPath(); ctx.moveTo(hcx-hr*0.28, hcy-hr*0.4); ctx.lineTo(hcx-hr*0.55, hcy-hr*1.1); ctx.lineTo(hcx-hr*0.28, hcy-hr*1.1); ctx.fill();
-          ctx.beginPath(); ctx.moveTo(hcx+hr*0.28, hcy-hr*0.4); ctx.lineTo(hcx+hr*0.55, hcy-hr*1.1); ctx.lineTo(hcx+hr*0.28, hcy-hr*1.1); ctx.fill();
-          // Beard
+          // Human face, green, with atef crown (white tall hat + side feathers)
+          // Human head
+          ctx.fillStyle = pal.head;
+          ctx.beginPath(); ctx.ellipse(headCX, headCY + headR*0.05, headR*0.52, headR*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Atef crown — tall white cylindrical crown
+          ctx.fillStyle = "#d8d0c0";
+          ctx.beginPath();
+          ctx.moveTo(headCX - headR*0.28, headCY - headR*0.42);
+          ctx.lineTo(headCX - headR*0.22, headCY - headR*1.35);
+          ctx.lineTo(headCX + headR*0.22, headCY - headR*1.35);
+          ctx.lineTo(headCX + headR*0.28, headCY - headR*0.42);
+          ctx.fill();
+          ctx.beginPath(); ctx.ellipse(headCX, headCY-headR*1.35, headR*0.22, headR*0.1, 0, 0, Math.PI*2); ctx.fill();
+          // Side ostrich plumes
+          ctx.fillStyle = "#c8b040";
+          ctx.beginPath(); ctx.moveTo(headCX-headR*0.28, headCY-headR*0.5); ctx.quadraticCurveTo(headCX-headR*0.65, headCY-headR*1.1, headCX-headR*0.28, headCY-headR*1.3); ctx.quadraticCurveTo(headCX-headR*0.1, headCY-headR*1.1, headCX-headR*0.28, headCY-headR*0.5); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(headCX+headR*0.28, headCY-headR*0.5); ctx.quadraticCurveTo(headCX+headR*0.65, headCY-headR*1.1, headCX+headR*0.28, headCY-headR*1.3); ctx.quadraticCurveTo(headCX+headR*0.1, headCY-headR*1.1, headCX+headR*0.28, headCY-headR*0.5); ctx.fill();
+          // Ceremonial beard
           ctx.fillStyle = "#c8a030";
-          ctx.fillRect(hcx-hr*0.1, hcy+hr*0.45, hr*0.2, hr*0.5);
-          // Eyes
-          ctx.fillStyle = "#1a1510";
-          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillRect(headCX-headR*0.1, headCY+headR*0.45, headR*0.2, headR*0.48);
+          ctx.beginPath(); ctx.moveTo(headCX-headR*0.1, headCY+headR*0.93); ctx.lineTo(headCX, headCY+headR*1.08); ctx.lineTo(headCX+headR*0.1, headCY+headR*0.93); ctx.fill();
+          // Eyes + kohl
+          ctx.fillStyle = "#1a1208"; ctx.fillRect(headCX-headR*0.38, headCY+headR*0.02, headR*0.28, headR*0.1);
+          ctx.fillRect(headCX+headR*0.1, headCY+headR*0.02, headR*0.28, headR*0.1);
 
         } else if (god === "sekhmet") {
-          // Lioness head
-          ctx.fillStyle = "#c88040";
-          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.7, hr*0.65, 0, 0, Math.PI*2); ctx.fill();
-          // Mane hints
-          ctx.fillStyle = "#a06030";
-          for (let m = 0; m < 6; m++) {
-            const ang = (m/6)*Math.PI*2;
-            ctx.beginPath(); ctx.arc(hcx + Math.cos(ang)*hr*0.62, hcy + Math.sin(ang)*hr*0.55, hr*0.18, 0, Math.PI*2); ctx.fill();
-          }
-          // Face overlay
-          ctx.fillStyle = "#d89050";
-          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.52, hr*0.48, 0, 0, Math.PI*2); ctx.fill();
-          // Round ears
-          ctx.fillStyle = "#c88040";
-          ctx.beginPath(); ctx.arc(hcx-hr*0.5, hcy-hr*0.4, hr*0.18, 0, Math.PI*2); ctx.fill();
-          ctx.beginPath(); ctx.arc(hcx+hr*0.5, hcy-hr*0.4, hr*0.18, 0, Math.PI*2); ctx.fill();
-          // Sun disk
-          ctx.fillStyle = "#e8b030";
-          ctx.beginPath(); ctx.arc(hcx, hcy-hr*0.8, hr*0.22, 0, Math.PI*2); ctx.fill();
-          // Eyes — fierce
-          ctx.fillStyle = "#1a0a04";
-          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy-hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy-hr*0.05, hr*0.12, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
+          // Lioness — round face, small round ears on top, flat muzzle
+          ctx.fillStyle = pal.head;
+          ctx.beginPath(); ctx.ellipse(headCX, headCY, headR*0.62, headR*0.58, 0, 0, Math.PI*2); ctx.fill();
+          // Round ears sitting on top
+          ctx.beginPath(); ctx.arc(headCX-headR*0.44, headCY-headR*0.5, headR*0.2, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(headCX+headR*0.44, headCY-headR*0.5, headR*0.2, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = pal.headHi;
+          ctx.beginPath(); ctx.arc(headCX-headR*0.44, headCY-headR*0.5, headR*0.11, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(headCX+headR*0.44, headCY-headR*0.5, headR*0.11, 0, Math.PI*2); ctx.fill();
+          // Flat wide muzzle
+          ctx.fillStyle = pal.headHi;
+          ctx.beginPath(); ctx.ellipse(headCX, headCY+headR*0.25, headR*0.38, headR*0.22, 0, 0, Math.PI*2); ctx.fill();
+          // Nostrils
+          ctx.fillStyle = pal.head;
+          ctx.beginPath(); ctx.ellipse(headCX-headR*0.12, headCY+headR*0.2, headR*0.06, headR*0.04, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(headCX+headR*0.12, headCY+headR*0.2, headR*0.06, headR*0.04, 0, 0, Math.PI*2); ctx.fill();
+          // Eyes — fierce amber
+          ctx.fillStyle = "#c88020";
+          ctx.beginPath(); ctx.ellipse(headCX-headR*0.25, headCY-headR*0.08, headR*0.13, headR*0.09, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(headCX+headR*0.25, headCY-headR*0.08, headR*0.13, headR*0.09, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#0a0604";
+          ctx.beginPath(); ctx.arc(headCX-headR*0.25, headCY-headR*0.08, headR*0.06, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(headCX+headR*0.25, headCY-headR*0.08, headR*0.06, 0, Math.PI*2); ctx.fill();
+          // Sun disk on top
+          ctx.fillStyle = "#e8a020";
+          ctx.beginPath(); ctx.arc(headCX, headCY-headR*0.75, headR*0.22, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = "#c87010"; ctx.lineWidth = headR*0.07;
+          ctx.beginPath(); ctx.arc(headCX, headCY-headR*0.75, headR*0.3, 0, Math.PI*2); ctx.stroke();
 
         } else if (god === "hathor") {
-          // Cow horns with sun disk
-          ctx.fillStyle = "#e8c880";
-          ctx.beginPath(); ctx.ellipse(hcx, hcy+hr*0.1, hr*0.6, hr*0.52, 0, 0, Math.PI*2); ctx.fill();
-          // Cow horns (curved)
-          ctx.strokeStyle = "#d0a840"; ctx.lineWidth = hr*0.18; ctx.lineCap = "round";
-          ctx.beginPath(); ctx.moveTo(hcx-hr*0.5, hcy-hr*0.1); ctx.quadraticCurveTo(hcx-hr*0.9, hcy-hr*0.8, hcx-hr*0.5, hcy-hr*1.1); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(hcx+hr*0.5, hcy-hr*0.1); ctx.quadraticCurveTo(hcx+hr*0.9, hcy-hr*0.8, hcx+hr*0.5, hcy-hr*1.1); ctx.stroke();
+          // Human face with cow horns curving up + sun disk between
+          ctx.fillStyle = pal.head;
+          ctx.beginPath(); ctx.ellipse(headCX, headCY+headR*0.05, headR*0.55, headR*0.52, 0, 0, Math.PI*2); ctx.fill();
+          // Cow horns — thick, sweep up and outward
+          ctx.strokeStyle = pal.headHi; ctx.lineWidth = headR*0.2; ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(headCX-headR*0.45, headCY-headR*0.2); ctx.quadraticCurveTo(headCX-headR*1.0, headCY-headR*0.9, headCX-headR*0.5, headCY-headR*1.25); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(headCX+headR*0.45, headCY-headR*0.2); ctx.quadraticCurveTo(headCX+headR*1.0, headCY-headR*0.9, headCX+headR*0.5, headCY-headR*1.25); ctx.stroke();
           ctx.lineCap = "butt";
           // Sun disk between horns
-          ctx.fillStyle = "#e83020";
-          ctx.beginPath(); ctx.arc(hcx, hcy-hr*0.9, hr*0.25, 0, Math.PI*2); ctx.fill();
-          ctx.strokeStyle = "#e8b030"; ctx.lineWidth = hr*0.08;
-          ctx.beginPath(); ctx.arc(hcx, hcy-hr*0.9, hr*0.32, 0, Math.PI*2); ctx.stroke();
-          // Eyes
-          ctx.fillStyle = "#1a1510";
-          ctx.beginPath(); ctx.ellipse(hcx-hr*0.22, hcy+hr*0.1, hr*0.1, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.22, hcy+hr*0.1, hr*0.1, hr*0.09, 0, 0, Math.PI*2); ctx.fill();
-
-        } else if (god === "ra") {
-          // Solar disk head
-          ctx.fillStyle = "#e8b020";
-          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.65, 0, Math.PI*2); ctx.fill();
-          // Rays
-          ctx.strokeStyle = "#f0c030"; ctx.lineWidth = hr*0.08;
-          for (let r = 0; r < 8; r++) {
-            const ang = (r/8)*Math.PI*2;
-            ctx.beginPath();
-            ctx.moveTo(hcx + Math.cos(ang)*hr*0.65, hcy + Math.sin(ang)*hr*0.65);
-            ctx.lineTo(hcx + Math.cos(ang)*hr*1.0, hcy + Math.sin(ang)*hr*1.0);
-            ctx.stroke();
-          }
-          // Inner disk
-          ctx.fillStyle = "#f8d040";
-          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.42, 0, Math.PI*2); ctx.fill();
-          // Eye
-          ctx.fillStyle = "#1a1510";
-          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.16, 0, Math.PI*2); ctx.fill();
-          ctx.fillStyle = "#f0c030";
-          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.08, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#d82010";
+          ctx.beginPath(); ctx.arc(headCX, headCY-headR*1.0, headR*0.24, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = "#e8a020"; ctx.lineWidth = headR*0.08;
+          ctx.beginPath(); ctx.arc(headCX, headCY-headR*1.0, headR*0.33, 0, Math.PI*2); ctx.stroke();
+          // Eyes + slight smile
+          ctx.fillStyle = "#1a1208"; ctx.fillRect(headCX-headR*0.38, headCY+headR*0.02, headR*0.25, headR*0.1);
+          ctx.fillRect(headCX+headR*0.13, headCY+headR*0.02, headR*0.25, headR*0.1);
 
         } else if (god === "sobek") {
-          // Crocodile head — long snout
-          ctx.fillStyle = "#4a7830";
-          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.65, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
-          // Snout
+          // Crocodile — long flattened snout protruding left, bumpy head
+          ctx.fillStyle = pal.head;
+          ctx.beginPath(); ctx.ellipse(headCX+headR*0.1, headCY-headR*0.05, headR*0.58, headR*0.48, 0, 0, Math.PI*2); ctx.fill();
+          // Long flat snout to the left
           ctx.beginPath();
-          ctx.moveTo(hcx - hr*0.55, hcy + hr*0.1);
-          ctx.lineTo(hcx - hr*1.1, hcy + hr*0.5);
-          ctx.lineTo(hcx - hr*1.1, hcy + hr*0.7);
-          ctx.lineTo(hcx - hr*0.55, hcy + hr*0.42);
-          ctx.closePath(); ctx.fill();
-          // Teeth
+          ctx.moveTo(headCX-headR*0.35, headCY-headR*0.15);
+          ctx.lineTo(headCX-headR*1.15, headCY + headR*0.05);
+          ctx.lineTo(headCX-headR*1.15, headCY + headR*0.28);
+          ctx.lineTo(headCX-headR*0.35, headCY + headR*0.2);
+          ctx.fill();
+          // Teeth along snout
           ctx.fillStyle = "#e8e0c8";
-          for (let t = 0; t < 4; t++) {
-            ctx.beginPath(); ctx.moveTo(hcx - hr*(0.62 + t*0.12), hcy + hr*0.1); ctx.lineTo(hcx - hr*(0.68 + t*0.12), hcy + hr*0.22); ctx.lineTo(hcx - hr*(0.56 + t*0.12), hcy + hr*0.22); ctx.fill();
+          for (let t = 0; t < 5; t++) {
+            const tx = headCX - headR*0.42 - t*headR*0.14;
+            ctx.beginPath(); ctx.moveTo(tx, headCY-headR*0.12); ctx.lineTo(tx-headR*0.04, headCY+headR*0.02); ctx.lineTo(tx-headR*0.08, headCY-headR*0.12); ctx.fill();
           }
-          // Eyes on top of head
+          // Eyes perched on top of head
           ctx.fillStyle = "#d09010";
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.3, hr*0.15, hr*0.11, 0, 0, Math.PI*2); ctx.fill();
-          ctx.fillStyle = "#1a1510";
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.1, hcy-hr*0.3, hr*0.07, hr*0.06, 0, 0, Math.PI*2); ctx.fill();
-          // Scales texture
-          ctx.strokeStyle = "rgba(30,60,10,0.35)"; ctx.lineWidth = 0.5;
-          for (let s = 0; s < 3; s++) { ctx.beginPath(); ctx.arc(hcx+hr*(0.1+s*0.18), hcy, hr*0.14, 0, Math.PI); ctx.stroke(); }
+          ctx.beginPath(); ctx.ellipse(headCX+headR*0.25, headCY-headR*0.4, headR*0.14, headR*0.1, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#0a0804";
+          ctx.beginPath(); ctx.ellipse(headCX+headR*0.25, headCY-headR*0.4, headR*0.07, headR*0.06, 0, 0, Math.PI*2); ctx.fill();
 
         } else if (god === "nephthys") {
-          // Winged woman — wings raised behind head
-          ctx.fillStyle = "#5855a0";
-          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.58, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
-          // Wings
-          ctx.fillStyle = "rgba(100,95,180,0.6)";
-          ctx.beginPath(); ctx.moveTo(hcx-hr*0.5, hcy); ctx.quadraticCurveTo(hcx-hr*1.2, hcy-hr*0.6, hcx-hr*0.8, hcy-hr*1.2); ctx.quadraticCurveTo(hcx-hr*0.3, hcy-hr*0.5, hcx, hcy); ctx.fill();
-          ctx.beginPath(); ctx.moveTo(hcx+hr*0.5, hcy); ctx.quadraticCurveTo(hcx+hr*1.2, hcy-hr*0.6, hcx+hr*0.8, hcy-hr*1.2); ctx.quadraticCurveTo(hcx+hr*0.3, hcy-hr*0.5, hcx, hcy); ctx.fill();
-          // Face overlay
-          ctx.fillStyle = "#a8a0e0";
-          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.42, hr*0.38, 0, 0, Math.PI*2); ctx.fill();
-          // Headdress glyph
-          ctx.fillStyle = "#e8c830";
-          ctx.font = `${hr * 0.8}px serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText("𓄤", hcx, hcy - hr*1.0);
+          // Human face with hieroglyphic headdress (house + basket glyph)
+          ctx.fillStyle = pal.head;
+          ctx.beginPath(); ctx.ellipse(headCX, headCY+headR*0.05, headR*0.52, headR*0.5, 0, 0, Math.PI*2); ctx.fill();
+          // Headdress — rectangular basket on top
+          ctx.fillStyle = "rgba(180,150,210,0.8)";
+          ctx.fillRect(headCX-headR*0.28, headCY-headR*0.88, headR*0.56, headR*0.48);
+          // House symbol inside headdress
+          ctx.strokeStyle = "rgba(120,90,150,0.8)"; ctx.lineWidth = 0.8;
+          ctx.strokeRect(headCX-headR*0.18, headCY-headR*0.8, headR*0.36, headR*0.28);
+          ctx.beginPath(); ctx.moveTo(headCX-headR*0.18, headCY-headR*0.8); ctx.lineTo(headCX, headCY-headR*1.0); ctx.lineTo(headCX+headR*0.18, headCY-headR*0.8); ctx.stroke();
           // Eyes
-          ctx.fillStyle = "#1a1540";
-          ctx.beginPath(); ctx.ellipse(hcx-hr*0.18, hcy-hr*0.05, hr*0.09, hr*0.07, 0, 0, Math.PI*2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.18, hcy-hr*0.05, hr*0.09, hr*0.07, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#1a1208"; ctx.fillRect(headCX-headR*0.38, headCY+headR*0.02, headR*0.25, headR*0.1);
+          ctx.fillRect(headCX+headR*0.13, headCY+headR*0.02, headR*0.25, headR*0.1);
 
         } else if (god === "ptah") {
-          // Mummiform Ptah — blue skin, close-fitting cap
-          ctx.fillStyle = "#2848a8";
-          ctx.beginPath(); ctx.ellipse(hcx, hcy, hr*0.56, hr*0.5, 0, 0, Math.PI*2); ctx.fill();
-          // Cap (no hair, tight fitting)
-          ctx.fillStyle = "#1830a0";
-          ctx.beginPath(); ctx.arc(hcx, hcy - hr*0.05, hr*0.56, Math.PI, 0); ctx.fill();
-          // Beard
-          ctx.fillStyle = "#1838a8";
-          ctx.fillRect(hcx-hr*0.12, hcy+hr*0.42, hr*0.24, hr*0.55);
-          // Was sceptre hint (thin vertical)
-          ctx.strokeStyle = "#c8a030"; ctx.lineWidth = hr*0.12;
-          ctx.beginPath(); ctx.moveTo(hcx+hr*0.7, hcy-hr*0.3); ctx.lineTo(hcx+hr*0.7, hcy+hr*0.6); ctx.stroke();
+          // Human face in tight cap (no nemes — Ptah has skullcap)
+          // Override the nemes with solid cap
+          ctx.fillStyle = "#1a2a50";
+          ctx.beginPath(); ctx.arc(headCX, headCY-headR*0.05, headR*0.58, Math.PI, 0); ctx.fill();
+          ctx.fillStyle = pal.head;
+          ctx.beginPath(); ctx.ellipse(headCX, headCY+headR*0.05, headR*0.52, headR*0.52, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#1a2a50";
+          ctx.beginPath(); ctx.arc(headCX, headCY-headR*0.05, headR*0.58, 0, Math.PI); ctx.fill();
+          // Was-sceptre beside
+          ctx.strokeStyle = "#c8a030"; ctx.lineWidth = headR*0.1;
+          ctx.beginPath(); ctx.moveTo(headCX+headR*0.8, headCY-headR*0.5); ctx.lineTo(headCX+headR*0.8, headCY+headR*0.7); ctx.stroke();
+          // Forked top of was
+          ctx.beginPath(); ctx.moveTo(headCX+headR*0.72, headCY-headR*0.5); ctx.lineTo(headCX+headR*0.8, headCY-headR*0.65); ctx.lineTo(headCX+headR*0.88, headCY-headR*0.5); ctx.stroke();
           // Eyes
-          ctx.fillStyle = "#e8e0d0";
-          ctx.beginPath(); ctx.ellipse(hcx-hr*0.2, hcy+hr*0.05, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.2, hcy+hr*0.05, hr*0.1, hr*0.08, 0, 0, Math.PI*2); ctx.fill();
-          ctx.fillStyle = "#1a1540";
-          ctx.beginPath(); ctx.ellipse(hcx-hr*0.2, hcy+hr*0.05, hr*0.05, hr*0.04, 0, 0, Math.PI*2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(hcx+hr*0.2, hcy+hr*0.05, hr*0.05, hr*0.04, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#e8e0d0"; ctx.fillRect(headCX-headR*0.35, headCY+headR*0.02, headR*0.23, headR*0.1);
+          ctx.fillRect(headCX+headR*0.12, headCY+headR*0.02, headR*0.23, headR*0.1);
 
         } else {
-          // Generic — plain circular head
-          ctx.fillStyle = "#888898";
-          ctx.beginPath(); ctx.arc(hcx, hcy, hr*0.6, 0, Math.PI*2); ctx.fill();
+          // Generic — plain human-ish head, nemes headdress
+          ctx.fillStyle = pal.head;
+          ctx.beginPath(); ctx.ellipse(headCX, headCY, headR*0.55, headR*0.52, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = pal.headHi;
+          ctx.beginPath(); ctx.ellipse(headCX+headR*0.08, headCY-headR*0.05, headR*0.28, headR*0.3, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#1a1208"; ctx.fillRect(headCX-headR*0.35, headCY+headR*0.02, headR*0.25, headR*0.1);
+          ctx.fillRect(headCX+headR*0.1, headCY+headR*0.02, headR*0.25, headR*0.1);
         }
 
-        // Base plinth
-        ctx.fillStyle = isNear ? "rgba(194,168,107,0.35)" : "rgba(100,85,60,0.5)";
-        ctx.fillRect(obj.x - 2, uy - 2, obj.w + 4, 5);
+        ctx.restore();
 
-        // Glow if near
+        // ── glow outline when near ─────────────────────────────────────
         if (isNear) {
+          ctx.save();
           ctx.strokeStyle = "#f9d342"; ctx.lineWidth = 1.5;
-          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 10;
+          ctx.shadowColor = "#f9d342"; ctx.shadowBlur = 12;
+          // Outline the body silhouette
           ctx.beginPath();
-          ctx.moveTo(ux - obj.w*0.48, uy);
-          ctx.lineTo(ux - obj.w*0.32, obj.y + 10);
-          ctx.lineTo(ux - obj.w*0.2,  obj.y + 2);
-          ctx.lineTo(ux + obj.w*0.2,  obj.y + 2);
-          ctx.lineTo(ux + obj.w*0.32, obj.y + 10);
-          ctx.lineTo(ux + obj.w*0.48, uy);
-          ctx.closePath(); ctx.stroke();
+          ctx.moveTo(bx - bw*0.5,  bodyTop);
+          ctx.lineTo(bx - bw*0.28, bodyBot);
+          ctx.lineTo(bx + bw*0.28, bodyBot);
+          ctx.lineTo(bx + bw*0.5,  bodyTop);
+          ctx.closePath();
+          ctx.stroke();
           ctx.shadowBlur = 0;
+          ctx.restore();
         }
         break;
       }
